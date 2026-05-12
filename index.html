@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boxer.io | Battle</title>
+    <title>Boxer.io | Fixed Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { cursor: crosshair; user-select: none; background-color: #020617; }
@@ -13,24 +13,29 @@
 <body class="text-white font-sans overflow-hidden">
 
     <div class="absolute top-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 pointer-events-none z-10">
-        <div class="bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 flex justify-between items-center shadow-2xl">
+        <div class="bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-2xl p-4 flex justify-between items-center shadow-2xl">
             <div class="flex flex-col">
-                <span class="text-slate-400 text-xs uppercase tracking-widest font-bold">Hráč</span>
-                <span id="pId" class="text-2xl font-black text-white">?</span>
+                <span class="text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black">Identita</span>
+                <span id="pIdDisplay" class="text-2xl font-black">HRÁČ ?</span>
             </div>
-            <div id="game-msg" class="text-center font-bold text-lg text-yellow-400">
-                LMB: Útok | RMB: Blok
+            <div class="px-6 py-2 bg-slate-800 rounded-xl border border-slate-700 shadow-inner">
+                <span id="game-msg" class="text-yellow-400 font-bold uppercase text-sm tracking-widest">Aréna připravena</span>
             </div>
-            <div class="text-right flex flex-col">
-                <span class="text-slate-400 text-xs uppercase tracking-widest font-bold">Status</span>
-                <span id="status-text" class="text-green-400 font-bold">Online</span>
+            <div class="text-right">
+                <div class="text-[10px] text-slate-500 font-black uppercase mb-1">Ovládání</div>
+                <div class="flex gap-2">
+                    <kbd class="px-2 py-1 bg-slate-800 rounded border border-slate-600 text-[10px]">LMB</kbd>
+                    <kbd class="px-2 py-1 bg-slate-800 rounded border border-slate-600 text-[10px]">RMB</kbd>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="death-screen" class="hidden absolute inset-0 bg-black/90 backdrop-blur-xl z-50 flex flex-col items-center justify-center">
-        <h1 class="text-9xl font-black text-red-600 mb-4 tracking-tighter italic">KO!</h1>
-        <p class="text-slate-400 text-2xl uppercase tracking-[0.5em]">Aréna se čistí...</p>
+    <div id="death-screen" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-2xl z-50 flex flex-col items-center justify-center">
+        <h1 class="text-9xl font-black text-red-600 mb-2 italic tracking-tighter animate-bounce">KO!</h1>
+        <div class="w-64 h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div class="h-full bg-red-600 animate-[pulse_1s_infinite] w-full"></div>
+        </div>
     </div>
 
     <canvas id="game" class="block w-full h-full"></canvas>
@@ -55,25 +60,19 @@
         const myId = urlParams.get('p') || '1';
         const enemyId = myId === '1' ? '2' : '1';
 
-        const pColors = {
-            '1': '#ef4444', // Červená
-            '2': '#3b82f6', // Modrá
-            '3': '#22c55e', // Zelená
-            '4': '#eab308'  // Žlutá
-        };
-
+        const pColors = { '1': '#f87171', '2': '#60a5fa', '3': '#4ade80', '4': '#fbbf24' };
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
-        const pIdSpan = document.getElementById('pId');
-        pIdSpan.innerText = myId;
-        pIdSpan.style.color = pColors[myId] || '#fff';
+        
+        document.getElementById('pIdDisplay').innerText = `HRÁČ ${myId}`;
+        document.getElementById('pIdDisplay').style.color = pColors[myId];
 
         let players = {};
-        let lastAttack = 0;
         let isResetting = false;
+        let lastAttack = 0;
 
         let myState = {
-            x: myId === '1' ? 300 : window.innerWidth - 300,
+            x: myId === '1' ? 200 : window.innerWidth - 200,
             y: window.innerHeight / 2,
             angle: 0,
             hp: 100,
@@ -91,14 +90,24 @@
 
         window.oncontextmenu = (e) => e.preventDefault();
 
+        // Inicializace v DB
         set(ref(db, 'players/' + myId), myState);
         onDisconnect(ref(db, 'players/' + myId)).remove();
 
+        // HLAVNÍ POSLUCHAČ
         onValue(ref(db, 'players'), (snapshot) => {
-            players = snapshot.val() || {};
+            const data = snapshot.val() || {};
+            players = data;
+
+            // OPRAVA: Pokud mi někdo v DB ubral životy, musím si je aktualizovat i lokálně,
+            // jinak bych je při dalším pohybu přepsal starou hodnotou.
+            if (data[myId]) {
+                myState.hp = data[myId].hp;
+            }
+
             if (!isResetting) {
-                for (let id in players) {
-                    if (players[id].hp <= 0) {
+                for (let id in data) {
+                    if (data[id].hp <= 0) {
                         triggerReset();
                         break;
                     }
@@ -111,7 +120,7 @@
             document.getElementById('death-screen').classList.remove('hidden');
             setTimeout(() => {
                 myState.hp = 100;
-                myState.x = myId === '1' ? 300 : canvas.width - 300;
+                myState.x = myId === '1' ? 200 : canvas.width - 200;
                 myState.y = canvas.height / 2;
                 update(ref(db, 'players/' + myId), myState);
                 document.getElementById('death-screen').classList.add('hidden');
@@ -123,7 +132,6 @@
             myState.isAttacking = true;
             sync();
 
-            // Získání nejčerstvějších dat o soupeři přímo z DB před útokem
             const enemySnap = await get(ref(db, 'players/' + enemyId));
             const enemy = enemySnap.val();
 
@@ -133,15 +141,19 @@
                 let angleDiff = Math.abs(myState.angle - angleToEnemy);
                 if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
-                if (dist < 100 && angleDiff < 0.8) {
+                if (dist < 110 && angleDiff < 0.8) {
                     const newHp = Math.max(0, enemy.hp - 15);
+                    // Zápis přímo do soupeřova uzlu
                     update(ref(db, 'players/' + enemyId), { hp: newHp });
                 }
             }
-            setTimeout(() => { myState.isAttacking = false; sync(); }, 150);
+            setTimeout(() => { myState.isAttacking = false; sync(); }, 100);
         }
 
-        function sync() { update(ref(db, 'players/' + myId), myState); }
+        function sync() { 
+            if (isResetting) return;
+            update(ref(db, 'players/' + myId), myState); 
+        }
 
         canvas.addEventListener('mousemove', (e) => {
             myState.angle = Math.atan2(e.clientY - myState.y, e.clientX - myState.x);
@@ -151,7 +163,7 @@
         window.addEventListener('mousedown', (e) => {
             if (myState.hp <= 0 || isResetting) return;
             if (e.button === 0 && !myState.isBlocking) {
-                if (Date.now() - lastAttack > 500) {
+                if (Date.now() - lastAttack > 450) {
                     performAttack();
                     lastAttack = Date.now();
                 }
@@ -176,11 +188,13 @@
             if (myState.hp <= 0 || myState.isBlocking || isResetting) return;
             const speed = 7;
             let moved = false;
-            if (keys['w'] || keys['arrowup']) { myState.y -= speed; moved = true; }
-            if (keys['s'] || keys['arrowdown']) { myState.y += speed; moved = true; }
-            if (keys['a'] || keys['arrowleft']) { myState.x -= speed; moved = true; }
-            if (keys['d'] || keys['arrowright']) { myState.x += speed; moved = true; }
-            
+            if (keys['w'] || keys['s'] || keys['a'] || keys['d'] || keys['arrowup'] || keys['arrowdown'] || keys['arrowleft'] || keys['arrowright']) {
+                if (keys['w'] || keys['arrowup']) myState.y -= speed;
+                if (keys['s'] || keys['arrowdown']) myState.y += speed;
+                if (keys['a'] || keys['arrowleft']) myState.x -= speed;
+                if (keys['d'] || keys['arrowright']) myState.x += speed;
+                moved = true;
+            }
             if (moved) {
                 myState.x = Math.max(40, Math.min(canvas.width - 40, myState.x));
                 myState.y = Math.max(40, Math.min(canvas.height - 40, myState.y));
@@ -191,11 +205,11 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Mřížka na pozadí
-            ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 1;
-            for(let i=0; i<canvas.width; i+=50) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
-            for(let i=0; i<canvas.height; i+=50) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
+            // Mřížka
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2;
+            for(let i=0; i<canvas.width; i+=60) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+            for(let i=0; i<canvas.height; i+=60) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
 
             for (let id in players) {
                 const p = players[id];
@@ -203,42 +217,54 @@
                 ctx.translate(p.x, p.y);
                 
                 // Stín
-                ctx.fillStyle = "rgba(0,0,0,0.4)";
-                ctx.beginPath(); ctx.ellipse(0, 40, 30, 12, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                ctx.beginPath(); ctx.ellipse(0, 40, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
 
                 ctx.rotate(p.angle);
 
                 // Tělo
-                ctx.fillStyle = p.isBlocking ? '#60a5fa' : p.color;
-                ctx.beginPath();
-                ctx.roundRect(-30, -30, 60, 60, 15);
-                ctx.fill();
+                ctx.fillStyle = p.isBlocking ? '#3b82f6' : p.color;
+                ctx.beginPath(); ctx.roundRect(-30, -30, 60, 60, 14); ctx.fill();
                 
                 // Oči
                 ctx.fillStyle = "white";
-                ctx.beginPath(); ctx.arc(15, -12, 5, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(15, 12, 5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(15, -12, 6, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(15, 12, 6, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "black";
+                ctx.beginPath(); ctx.arc(18, -12, 2.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(18, 12, 2.5, 0, Math.PI*2); ctx.fill();
 
-                // Útok - pěst
+                // Pěst při útoku
                 if (p.isAttacking) {
                     ctx.fillStyle = "white";
-                    ctx.beginPath(); ctx.arc(45, 0, 18, 0, Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = "white";
+                    ctx.beginPath(); ctx.arc(50, 0, 20, 0, Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 0;
                 }
 
                 ctx.restore();
 
-                // HP Bar
+                // HP Bar - VYLEPŠENÝ
                 const bw = 100;
-                ctx.fillStyle = "#0f172a";
-                ctx.roundRect(p.x - bw/2, p.y - 75, bw, 10, 5); ctx.fill();
-                ctx.fillStyle = p.hp > 40 ? "#22c55e" : "#ef4444";
-                ctx.roundRect(p.x - bw/2, p.y - 75, (p.hp / 100) * bw, 10, 5); ctx.fill();
+                const bh = 12;
+                ctx.fillStyle = "#1e293b";
+                ctx.beginPath(); ctx.roundRect(p.x - bw/2, p.y - 80, bw, bh, 6); ctx.fill();
                 
-                // Jméno/ID
+                // Barva HP baru podle stavu
+                let hpColor = "#22c55e";
+                if (p.hp < 60) hpColor = "#eab308";
+                if (p.hp < 30) hpColor = "#ef4444";
+                
+                ctx.fillStyle = hpColor;
+                const currentHpWidth = Math.max(0, (p.hp / 100) * bw);
+                ctx.beginPath(); ctx.roundRect(p.x - bw/2, p.y - 80, currentHpWidth, bh, 6); ctx.fill();
+
+                // Text nad hráčem
                 ctx.fillStyle = "white";
-                ctx.font = "bold 14px sans-serif";
+                ctx.font = "black 12px sans-serif";
                 ctx.textAlign = "center";
-                ctx.fillText(`Hráč ${id}`, p.x, p.y - 85);
+                ctx.fillText(`P${id} [${p.hp}%]`, p.x, p.y - 90);
             }
             
             updateMovement();
