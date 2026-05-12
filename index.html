@@ -1,19 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="cs">
 <head>
-    <title>MooMoo Boxer Edition</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boxer.io | Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: #fff; font-family: sans-serif; overflow: hidden; text-align: center; cursor: crosshair; }
-        canvas { background: #2c3e50; border: 5px solid #34495e; margin-top: 10px; }
-        .ui { position: fixed; top: 10px; width: 100%; pointer-events: none; }
+        body { cursor: crosshair; user-select: none; }
+        canvas { image-rendering: pixelated; }
     </style>
 </head>
-<body>
-    <div class="ui">
-        <h2>Hráč <span id="pId">?</span></h2>
-        <p>LMB: Útok | RMB: Blok (držením) | Pohyb: Šipky/WASD</p>
+<body class="bg-slate-950 text-white font-sans overflow-hidden">
+
+    <!-- UI Overlay -->
+    <div class="absolute top-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 pointer-events-none">
+        <div class="bg-slate-900/80 backdrop-blur-md border border-slate-700 rounded-2xl p-4 flex justify-between items-center shadow-2xl">
+            <div class="flex flex-col">
+                <span class="text-slate-400 text-xs uppercase tracking-widest font-bold">Hráč</span>
+                <span id="pId" class="text-2xl font-black text-blue-400">?</span>
+            </div>
+            
+            <div id="game-msg" class="text-center font-bold text-xl text-yellow-400 animate-pulse">
+                Najdi soupeře a zbuš ho!
+            </div>
+
+            <div class="text-right text-slate-400 text-xs">
+                LMB: Útok | RMB: Blok<br>WASD: Pohyb
+            </div>
+        </div>
     </div>
-    <canvas id="game" width="1000" height="600"></canvas>
+
+    <!-- Game Over Screen -->
+    <div id="death-screen" class="hidden absolute inset-0 bg-black/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center">
+        <h1 class="text-8xl font-black text-red-600 mb-4 tracking-tighter">KO!</h1>
+        <p class="text-slate-400 text-xl">Resetování arény za okamžik...</p>
+    </div>
+
+    <canvas id="game" class="block w-full h-full"></canvas>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -38,21 +61,28 @@
 
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
+        const deathScreen = document.getElementById('death-screen');
         
         let players = {};
         let lastAttack = 0;
-        const ATTACK_COOLDOWN = 500; // ms
+        let isResetting = false;
 
         let myState = {
-            x: myId === '1' ? 200 : 800,
-            y: 300,
+            x: myId === '1' ? 200 : window.innerWidth - 200,
+            y: window.innerHeight / 2,
             angle: 0,
             hp: 100,
             isAttacking: false,
             isBlocking: false
         };
 
-        // Zakázat pravé tlačítko (menu)
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.onresize = resize;
+        resize();
+
         window.oncontextmenu = (e) => e.preventDefault();
 
         set(ref(db, 'players/' + myId), myState);
@@ -60,28 +90,47 @@
 
         onValue(ref(db, 'players'), (snapshot) => {
             players = snapshot.val() || {};
+            checkWinCondition();
         });
 
-        // Sledování myši pro rotaci
+        function checkWinCondition() {
+            if (isResetting) return;
+            
+            for (let id in players) {
+                if (players[id].hp <= 0) {
+                    isResetting = true;
+                    deathScreen.classList.remove('hidden');
+                    setTimeout(resetGame, 3000);
+                    break;
+                }
+            }
+        }
+
+        function resetGame() {
+            myState.hp = 100;
+            myState.x = myId === '1' ? 200 : canvas.width - 200;
+            myState.y = canvas.height / 2;
+            myState.isBlocking = false;
+            myState.isAttacking = false;
+            update(ref(db, 'players/' + myId), myState);
+            deathScreen.classList.add('hidden');
+            isResetting = false;
+        }
+
         canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            myState.angle = Math.atan2(mouseY - myState.y, mouseX - myState.x);
+            myState.angle = Math.atan2(e.clientY - myState.y, e.clientX - myState.x);
             sync();
         });
 
-        // Útok a blok myší
         window.addEventListener('mousedown', (e) => {
-            if (myState.hp <= 0) return;
-            
-            if (e.button === 0 && !myState.isBlocking) { // Levý klik - Útok
+            if (myState.hp <= 0 || isResetting) return;
+            if (e.button === 0 && !myState.isBlocking) {
                 const now = Date.now();
-                if (now - lastAttack > ATTACK_COOLDOWN) {
+                if (now - lastAttack > 400) {
                     performAttack();
                     lastAttack = now;
                 }
-            } else if (e.button === 2) { // Pravý klik - Blok
+            } else if (e.button === 2) {
                 myState.isBlocking = true;
                 sync();
             }
@@ -97,86 +146,100 @@
         function performAttack() {
             myState.isAttacking = true;
             sync();
-
             const enemy = players[enemyId];
             if (enemy && !enemy.isBlocking) {
                 const dist = Math.sqrt(Math.pow(myState.x - enemy.x, 2) + Math.pow(myState.y - enemy.y, 2));
-                // Kontrola vzdálenosti a úhlu (musíš mířit na něj)
                 const angleToEnemy = Math.atan2(enemy.y - myState.y, enemy.x - myState.x);
-                const angleDiff = Math.abs(myState.angle - angleToEnemy);
+                let angleDiff = Math.abs(myState.angle - angleToEnemy);
+                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
                 
-                if (dist < 80 && (angleDiff < 0.8 || angleDiff > 5.4)) {
-                    const newHp = Math.max(0, (enemy.hp || 100) - 15);
+                if (dist < 90 && angleDiff < 0.6) {
+                    const newHp = Math.max(0, (enemy.hp || 100) - 12);
                     update(ref(db, 'players/' + enemyId), { hp: newHp });
                 }
             }
-
-            setTimeout(() => {
-                myState.isAttacking = false;
-                sync();
-            }, 150);
+            setTimeout(() => { myState.isAttacking = false; sync(); }, 100);
         }
 
-        function sync() {
-            update(ref(db, 'players/' + myId), myState);
-        }
+        function sync() { update(ref(db, 'players/' + myId), myState); }
 
-        // Pohyb (WASD i šipky)
         const keys = {};
         window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
         window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
 
         function updateMovement() {
-            if (myState.hp <= 0 || myState.isBlocking) return;
-            let speed = 5;
-            if (keys['w'] || keys['arrowup']) myState.y -= speed;
-            if (keys['s'] || keys['arrowdown']) myState.y += speed;
-            if (keys['a'] || keys['arrowleft']) myState.x -= speed;
-            if (keys['d'] || keys['arrowright']) myState.x += speed;
-            
-            if (keys['w'] || keys['s'] || keys['a'] || keys['d'] || keys['arrowup'] || keys['arrowdown'] || keys['arrowleft'] || keys['arrowright']) {
+            if (myState.hp <= 0 || myState.isBlocking || isResetting) return;
+            const speed = 6;
+            let moved = false;
+            if (keys['w'] || keys['s'] || keys['a'] || keys['d']) {
+                if (keys['w']) myState.y -= speed;
+                if (keys['s']) myState.y += speed;
+                if (keys['a']) myState.x -= speed;
+                if (keys['d']) myState.x += speed;
+                moved = true;
+            }
+            if (moved) {
+                myState.x = Math.max(30, Math.min(canvas.width - 30, myState.x));
+                myState.y = Math.max(30, Math.min(canvas.height - 30, myState.y));
                 sync();
             }
         }
 
         function draw() {
-            ctx.fillStyle = "#2c3e50";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             for (let id in players) {
                 const p = players[id];
                 ctx.save();
                 ctx.translate(p.x, p.y);
+                
+                // Stín
+                ctx.fillStyle = "rgba(0,0,0,0.3)";
+                ctx.beginPath();
+                ctx.ellipse(0, 35, 25, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
                 ctx.rotate(p.angle);
 
-                // Tělo postavy
-                ctx.fillStyle = id === '1' ? '#ff4757' : '#2ed573';
-                if (p.isBlocking) ctx.fillStyle = '#54a0ff';
+                // Tělo (zaoblený čtverec)
+                ctx.fillStyle = id === '1' ? '#ef4444' : '#22c55e';
+                if (p.isBlocking) ctx.fillStyle = '#3b82f6';
                 
-                ctx.fillRect(-25, -25, 50, 50);
-                
-                // "Ruce" nebo směr útoku
+                // Kreslení se zaoblením
+                const size = 50;
+                ctx.beginPath();
+                ctx.roundRect(-size/2, -size/2, size, size, 12);
+                ctx.fill();
+
+                // Obličej/Oči
+                ctx.fillStyle = "white";
+                ctx.fillRect(10, -15, 8, 8);
+                ctx.fillRect(10, 7, 8, 8);
+
+                // Útok (pěsti)
                 if (p.isAttacking) {
-                    ctx.fillStyle = "white";
-                    ctx.fillRect(20, -10, 30, 20);
-                } else {
-                    ctx.fillStyle = "rgba(255,255,255,0.3)";
-                    ctx.fillRect(20, -5, 10, 10);
+                    ctx.fillStyle = "#fff";
+                    ctx.beginPath();
+                    ctx.arc(35, 0, 15, 0, Math.PI * 2);
+                    ctx.fill();
                 }
 
                 ctx.restore();
 
-                // HP Bar (mimo rotaci)
-                ctx.fillStyle = "#000";
-                ctx.fillRect(p.x - 30, p.y - 45, 60, 10);
-                ctx.fillStyle = p.hp > 0 ? (id === '1' ? '#ff4757' : '#2ed573') : "#000";
-                ctx.fillRect(p.x - 30, p.y - 45, (p.hp / 100) * 60, 10);
+                // HP Bar
+                const barWidth = 80;
+                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                ctx.roundRect(p.x - barWidth/2, p.y - 60, barWidth, 8, 4);
+                ctx.fill();
+                
+                ctx.fillStyle = p.hp > 30 ? "#22c55e" : "#ef4444";
+                ctx.roundRect(p.x - barWidth/2, p.y - 60, (p.hp / 100) * barWidth, 8, 4);
+                ctx.fill();
             }
             
             updateMovement();
             requestAnimationFrame(draw);
         }
-
         draw();
     </script>
 </body>
