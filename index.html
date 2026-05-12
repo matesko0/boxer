@@ -1,21 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Boxer Duo Fix</title>
+    <title>Boxer Combat Duo</title>
     <style>
-        body { margin: 0; background: #000; color: #0f0; font-family: monospace; overflow: hidden; text-align: center; }
-        canvas { background: #111; border: 2px solid #444; margin-top: 20px; }
-        #debug { position: fixed; top: 10px; left: 10px; text-align: left; font-size: 12px; color: #888; }
+        body { margin: 0; background: #1a1a1a; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; text-align: center; }
+        canvas { background: #000; border: 4px solid #444; margin-top: 10px; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+        .controls { color: #aaa; font-size: 0.9rem; margin-top: 5px; }
+        b { color: #ff4757; }
     </style>
 </head>
 <body>
-    <div id="debug">Status: Inicializace...</div>
-    <h2>Hráč <span id="pId">?</span></h2>
-    <canvas id="game" width="600" height="400"></canvas>
+    <h2>BOJOVKA: Hráč <span id="pId">?</span></h2>
+    <div class="controls">Pohyb: <b>Šipky</b> | Útok: <b>Mezerník</b> | Blok: <b>Klávesa B</b></div>
+    <canvas id="game" width="800" height="500"></canvas>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, onDisconnect, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCJdPiQ-diG_VnRGq6vnZshVUhViPmy_Qk",
@@ -29,60 +30,127 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        const debug = document.getElementById('debug');
-        
         const urlParams = new URLSearchParams(window.location.search);
         const myId = urlParams.get('p') || '1';
+        const enemyId = myId === '1' ? '2' : '1';
         document.getElementById('pId').innerText = myId;
 
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         
-        let allPlayers = {};
-        let myPos = { x: myId === '1' ? 100 : 400, y: 200 };
+        let players = {};
+        let myState = {
+            x: myId === '1' ? 100 : 600,
+            y: 200,
+            hp: 100,
+            isAttacking: false,
+            isBlocking: false
+        };
 
-        // Zápis startovní pozice
-        set(ref(db, 'players/' + myId), myPos);
-        debug.innerText = "Status: Připojeno k Firebase";
-
-        // Smazat mě, když zavřu okno
+        // Reset HP a pozice při startu
+        set(ref(db, 'players/' + myId), myState);
         onDisconnect(ref(db, 'players/' + myId)).remove();
 
-        // Poslech změn
         onValue(ref(db, 'players'), (snapshot) => {
-            allPlayers = snapshot.val() || {};
+            players = snapshot.val() || {};
             draw();
         });
 
+        function checkHit() {
+            const enemy = players[enemyId];
+            if (!enemy) return;
+
+            // Vzdálenost mezi hráči
+            const dist = Math.sqrt(Math.pow(myState.x - enemy.x, 2) + Math.pow(myState.y - enemy.y, 2));
+            
+            if (dist < 60 && !enemy.isBlocking) {
+                const newHp = Math.max(0, (enemy.hp || 100) - 10);
+                update(ref(db, 'players/' + enemyId), { hp: newHp });
+            }
+        }
+
         function draw() {
-            ctx.fillStyle = "#111";
+            ctx.fillStyle = "#222";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            for (let id in allPlayers) {
-                const p = allPlayers[id];
-                ctx.fillStyle = id === '1' ? '#ff3e3e' : '#3eff3e';
-                ctx.fillRect(p.x, p.y, 40, 40);
+            for (let id in players) {
+                const p = players[id];
+                const isMe = id === myId;
+                
+                // Vykreslení těla
+                ctx.fillStyle = id === '1' ? '#ff4757' : '#2ed573';
+                if (p.isBlocking) ctx.fillStyle = '#54a0ff'; // Modrá při bloku
+                
+                ctx.shadowBlur = p.isAttacking ? 20 : 0;
+                ctx.shadowColor = "white";
+                ctx.fillRect(p.x, p.y, 50, 50);
+                ctx.shadowBlur = 0;
+
+                // Vykreslení útoku (bílé kolečko)
+                if (p.isAttacking) {
+                    ctx.strokeStyle = "white";
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(p.x - 5, p.y - 5, 60, 60);
+                }
+
+                // HP Bar
+                ctx.fillStyle = "#333";
+                ctx.fillRect(p.x, p.y - 20, 50, 8);
+                ctx.fillStyle = p.hp > 30 ? "#2ecc71" : "#e74c3c";
+                ctx.fillRect(p.x, p.y - 20, (p.hp / 100) * 50, 8);
+
                 ctx.fillStyle = "#fff";
-                ctx.fillText("Hráč " + id, p.x, p.y - 10);
+                ctx.font = "bold 12px Arial";
+                ctx.fillText(id === myId ? "TY" : "SOUPEŘ", p.x, p.y - 25);
+                
+                if (p.hp <= 0) {
+                    ctx.fillStyle = "red";
+                    ctx.font = "40px Arial";
+                    ctx.fillText("KO", p.x, p.y + 40);
+                }
             }
         }
 
         window.addEventListener('keydown', (e) => {
-            const speed = 15;
-            if (e.key === 'ArrowUp') myPos.y -= speed;
-            if (e.key === 'ArrowDown') myPos.y += speed;
-            if (e.key === 'ArrowLeft') myPos.x -= speed;
-            if (e.key === 'ArrowRight') myPos.x += speed;
+            if (myState.hp <= 0) return; // Mrtví nehrajou
 
-            // Omezení pohybu v canvasu
-            myPos.x = Math.max(0, Math.min(canvas.width - 40, myPos.x));
-            myPos.y = Math.max(0, Math.min(canvas.height - 40, myPos.y));
+            let moved = false;
+            if (e.key === 'ArrowUp') { myState.y -= 15; moved = true; }
+            if (e.key === 'ArrowDown') { myState.y += 15; moved = true; }
+            if (e.key === 'ArrowLeft') { myState.x -= 15; moved = true; }
+            if (e.key === 'ArrowRight') { myState.x += 15; moved = true; }
+            
+            if (e.code === 'Space' && !myState.isAttacking) {
+                myState.isAttacking = true;
+                checkHit();
+                setTimeout(() => { 
+                    myState.isAttacking = false; 
+                    update(ref(db, 'players/' + myId), { isAttacking: false });
+                }, 200);
+                moved = true;
+            }
 
-            set(ref(db, 'players/' + myId), myPos);
+            if (e.key.toLowerCase() === 'b') {
+                myState.isBlocking = true;
+                moved = true;
+            }
+
+            if (moved) {
+                myState.x = Math.max(0, Math.min(canvas.width - 50, myState.x));
+                myState.y = Math.max(0, Math.min(canvas.height - 50, myState.y));
+                update(ref(db, 'players/' + myId), myState);
+            }
         });
 
-        // První vykreslení
-        draw();
+        window.addEventListener('keyup', (e) => {
+            if (e.key.toLowerCase() === 'b') {
+                myState.isBlocking = false;
+                update(ref(db, 'players/' + myId), { isBlocking: false });
+            }
+        });
+
+        // Loop pro plynulejší překreslování
+        setInterval(draw, 1000/60);
     </script>
 </body>
 </html>
