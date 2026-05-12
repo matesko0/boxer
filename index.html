@@ -5,64 +5,252 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Boxer.io | Arena</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700;900&display=swap" rel="stylesheet">
     <style>
-        body { cursor: crosshair; user-select: none; background-color: #020617; }
-        canvas { image-rendering: auto; }
-        .glass { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 1); }
+        :root {
+            --red: #f43f5e;
+            --blue: #3b82f6;
+            --gold: #fbbf24;
+            --bg: #050810;
+            --surface: rgba(15, 23, 42, 0.92);
+            --border: rgba(51, 65, 85, 0.8);
+        }
+        * { box-sizing: border-box; }
+        body {
+            cursor: crosshair;
+            user-select: none;
+            background-color: var(--bg);
+            font-family: 'DM Sans', sans-serif;
+            overflow: hidden;
+        }
+        h1, h2, .bebas { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; }
+        canvas { image-rendering: auto; display: block; }
+
+        .glass {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+        }
+
+        /* Auth screen */
+        #auth-screen {
+            background: radial-gradient(ellipse at 30% 60%, rgba(59,130,246,0.12) 0%, transparent 60%),
+                        radial-gradient(ellipse at 70% 30%, rgba(244,63,94,0.10) 0%, transparent 60%),
+                        var(--bg);
+        }
+        .auth-card {
+            background: rgba(10, 17, 35, 0.95);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            box-shadow: 0 0 60px rgba(59,130,246,0.08), 0 30px 60px rgba(0,0,0,0.6);
+        }
+        .auth-title { font-size: 4.5rem; line-height: 1; }
+        .auth-input {
+            background: rgba(30,41,59,0.7);
+            border: 1px solid rgba(71,85,105,0.6);
+            color: white;
+            padding: 14px 18px;
+            border-radius: 14px;
+            width: 100%;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        .auth-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+        .auth-input::placeholder { color: rgba(148,163,184,0.5); }
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white; border: none; border-radius: 14px;
+            padding: 14px 24px; font-weight: 800; font-size: 13px;
+            letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+            transition: all 0.2s; box-shadow: 0 4px 20px rgba(59,130,246,0.3);
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(59,130,246,0.45); }
+        .btn-secondary {
+            background: rgba(30,41,59,0.8); color: rgba(148,163,184,1);
+            border: 1px solid rgba(71,85,105,0.5); border-radius: 14px;
+            padding: 14px 24px; font-weight: 700; font-size: 13px;
+            letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { background: rgba(51,65,85,0.8); color: white; }
+
+        /* Match screen */
+        #match-screen {
+            background: radial-gradient(ellipse at center, rgba(59,130,246,0.06) 0%, var(--bg) 70%);
+        }
+        .spinner {
+            width: 56px; height: 56px;
+            border: 3px solid rgba(59,130,246,0.2);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* HUD */
+        .hud-card {
+            background: rgba(8, 14, 28, 0.88);
+            border: 1px solid rgba(51, 65, 85, 0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 20px;
+        }
+        .leaderboard-item { display: flex; justify-content: space-between; align-items: center; }
+        .rank-badge {
+            width: 22px; height: 22px; border-radius: 6px;
+            background: rgba(51,65,85,0.5); color: rgba(148,163,184,0.7);
+            font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+        }
+        .rank-badge.gold { background: rgba(251,191,36,0.2); color: var(--gold); }
+        .wins-badge {
+            background: rgba(59,130,246,0.12); color: var(--blue);
+            padding: 2px 10px; border-radius: 8px; font-size: 12px; font-weight: 800;
+        }
+
+        /* Result screen */
+        #result-screen {
+            background: rgba(0,0,0,0.92);
+            backdrop-filter: blur(24px);
+        }
+        .result-card {
+            background: rgba(8, 14, 28, 0.96);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 40px;
+            padding: 56px;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.8);
+        }
+        .winner-text {
+            font-size: 5rem;
+            line-height: 1;
+            font-family: 'Bebas Neue', sans-serif;
+            letter-spacing: 0.06em;
+        }
+
+        /* Damage number animation */
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1.2); }
+            100% { opacity: 0; transform: translateY(-60px) scale(0.8); }
+        }
+        .dmg-number {
+            position: fixed; pointer-events: none; z-index: 200;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 28px;
+            color: #f43f5e;
+            text-shadow: 0 0 10px rgba(244,63,94,0.8);
+            animation: floatUp 0.7s ease-out forwards;
+        }
+
+        /* HP bars */
+        .hp-container {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            padding: 20px 40px;
+            display: flex; gap: 16px; align-items: flex-end;
+            pointer-events: none; z-index: 10;
+            background: linear-gradient(to top, rgba(5,8,16,0.9) 0%, transparent 100%);
+        }
+        .hp-player { flex: 1; }
+        .hp-name { font-size: 13px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px; color: rgba(148,163,184,0.8); }
+        .hp-name.right { text-align: right; }
+        .hp-track {
+            height: 10px; background: rgba(30,41,59,0.8);
+            border-radius: 10px; overflow: hidden;
+            border: 1px solid rgba(51,65,85,0.5);
+        }
+        .hp-fill {
+            height: 100%; border-radius: 10px;
+            transition: width 0.15s ease;
+        }
+        .hp-fill.p1 { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+        .hp-fill.p2 { background: linear-gradient(90deg, #3b82f6, #60a5fa); margin-left: auto; }
+        .hp-vs { font-family: 'Bebas Neue', sans-serif; font-size: 24px; color: rgba(255,255,255,0.2); flex-shrink: 0; padding-bottom: 2px; }
+        .hp-num { font-size: 11px; font-weight: 800; color: rgba(148,163,184,0.6); margin-top: 4px; }
+        .hp-num.right { text-align: right; }
     </style>
 </head>
-<body class="text-white font-sans overflow-hidden">
+<body class="text-white overflow-hidden">
 
-    <div id="auth-screen" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950">
-        <div class="glass p-8 rounded-3xl w-full max-w-md shadow-2xl border-blue-500/20 border-2">
-            <h1 class="text-4xl font-black mb-6 text-center tracking-tighter">BOXER<span class="text-blue-500">.IO</span></h1>
-            <div class="space-y-4">
-                <input id="auth-email" type="text" placeholder="Uživatelské jméno" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl focus:outline-none focus:border-blue-500 transition-all">
-                <input id="auth-pass" type="password" placeholder="Heslo" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl focus:outline-none focus:border-blue-500 transition-all">
-                <div class="flex gap-2">
-                    <button id="btn-login" class="flex-1 bg-blue-600 hover:bg-blue-500 p-3 rounded-xl font-bold transition-all text-sm uppercase">Přihlásit</button>
-                    <button id="btn-reg" class="flex-1 bg-slate-700 hover:bg-slate-600 p-3 rounded-xl font-bold transition-all text-sm uppercase">Registrovat</button>
+    <!-- Auth -->
+    <div id="auth-screen" class="fixed inset-0 z-[100] flex items-center justify-center">
+        <div class="auth-card rounded-[28px] w-full max-w-sm p-8">
+            <div class="text-center mb-8">
+                <h1 class="auth-title bebas">BOXER<span style="color:var(--blue);">.IO</span></h1>
+                <p style="color:rgba(148,163,184,0.5); font-size:13px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; margin-top:4px;">Online PvP Arena</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                <input id="auth-email" class="auth-input" type="text" placeholder="Uživatelské jméno" autocomplete="off">
+                <input id="auth-pass" class="auth-input" type="password" placeholder="Heslo">
+                <div style="display:flex;gap:10px;margin-top:4px;">
+                    <button id="btn-login" class="btn-primary" style="flex:1;">Přihlásit</button>
+                    <button id="btn-reg" class="btn-secondary" style="flex:1;">Registrovat</button>
                 </div>
             </div>
+            <p id="auth-error" style="color:#f43f5e;font-size:13px;margin-top:12px;text-align:center;min-height:20px;"></p>
         </div>
     </div>
 
-    <div id="match-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950">
-        <div class="text-center">
-            <div class="inline-block w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <h2 class="text-2xl font-bold italic animate-pulse">HLEDÁNÍ SOUPEŘE...</h2>
-            <p id="room-status" class="text-slate-500 mt-2 font-mono">Připojování k aréně</p>
+    <!-- Matchmaking -->
+    <div id="match-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+        <div style="text-align:center;">
+            <div class="spinner" style="margin:0 auto 24px;"></div>
+            <h2 class="bebas" style="font-size:2.5rem; letter-spacing:0.08em;">HLEDÁNÍ SOUPEŘE</h2>
+            <p id="room-status" style="color:rgba(148,163,184,0.5);margin-top:8px;font-size:13px;font-weight:600;letter-spacing:0.06em;">Připojování k aréně...</p>
         </div>
     </div>
 
+    <!-- Game HUD -->
     <div id="game-ui" class="hidden">
-        <div class="absolute top-4 left-4 pointer-events-none z-10 flex gap-4">
-            <div class="glass p-4 rounded-2xl flex flex-col min-w-[120px]">
-                <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Místnost</span>
-                <span id="room-id-display" class="text-lg font-black text-blue-400">#---</span>
+        <div style="position:absolute;top:20px;left:20px;z-index:10;pointer-events:none;">
+            <div class="hud-card" style="padding:12px 18px;">
+                <div style="font-size:10px;font-weight:800;color:rgba(148,163,184,0.5);text-transform:uppercase;letter-spacing:0.1em;">Místnost</div>
+                <div id="room-id-display" class="bebas" style="font-size:1.4rem;color:var(--blue);">#---</div>
             </div>
         </div>
 
-        <div class="absolute top-4 right-4 pointer-events-none z-10">
-            <div class="glass p-5 rounded-3xl w-64 shadow-2xl border-l-4 border-blue-500">
-                <h3 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Top 5 Boxeři</h3>
-                <div id="global-scores" class="space-y-3"></div>
+        <div style="position:absolute;top:20px;right:20px;z-index:10;pointer-events:none;">
+            <div class="hud-card" style="padding:18px;width:220px;">
+                <div style="font-size:10px;font-weight:800;color:rgba(148,163,184,0.5);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;">🏆 Žebříček</div>
+                <div id="global-scores" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+        </div>
+
+        <!-- HP bars at bottom -->
+        <div class="hp-container" id="hp-container">
+            <div class="hp-player">
+                <div class="hp-name" id="hp-name-p1">Hráč 1</div>
+                <div class="hp-track"><div class="hp-fill p1" id="hp-fill-p1" style="width:100%"></div></div>
+                <div class="hp-num" id="hp-num-p1">100 HP</div>
+            </div>
+            <div class="hp-vs">VS</div>
+            <div class="hp-player">
+                <div class="hp-name right" id="hp-name-p2">Hráč 2</div>
+                <div class="hp-track"><div class="hp-fill p2" id="hp-fill-p2" style="width:100%;float:right;"></div></div>
+                <div class="hp-num right" id="hp-num-p2">100 HP</div>
+            </div>
+        </div>
+
+        <!-- Controls hint -->
+        <div style="position:absolute;bottom:80px;left:50%;transform:translateX(-50%);pointer-events:none;z-index:10;">
+            <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:8px 18px;font-size:11px;font-weight:600;color:rgba(148,163,184,0.4);letter-spacing:0.05em;white-space:nowrap;">
+                WASD / šipky — pohyb &nbsp;|&nbsp; LMB — útok &nbsp;|&nbsp; RMB — blok
             </div>
         </div>
     </div>
 
-    <div id="result-screen" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-xl">
-        <div class="text-center p-12 glass rounded-[3rem] border-2 border-white/10">
-            <h1 id="winner-text" class="text-7xl font-black mb-8 italic tracking-tighter">VÍTĚZ!</h1>
-            <div class="flex gap-4 justify-center">
-                <button id="btn-rematch" class="bg-blue-600 hover:bg-blue-500 px-10 py-5 rounded-2xl font-black text-xl transition-all uppercase shadow-lg shadow-blue-500/20">Odveta</button>
-                <button id="btn-new-match" class="bg-slate-700 hover:bg-slate-600 px-10 py-5 rounded-2xl font-black text-xl transition-all uppercase">Další match</button>
+    <!-- Result -->
+    <div id="result-screen" class="hidden fixed inset-0 z-[60] items-center justify-center">
+        <div class="result-card" style="text-align:center;">
+            <div id="result-icon" style="font-size:4rem;margin-bottom:8px;">🥊</div>
+            <div id="winner-text" class="winner-text" style="color:white;margin-bottom:32px;">VÍTĚZ!</div>
+            <div style="display:flex;gap:12px;justify-content:center;">
+                <button id="btn-rematch" class="btn-primary" style="padding:16px 36px;font-size:15px;">⚡ Odveta</button>
+                <button id="btn-new-match" class="btn-secondary" style="padding:16px 36px;font-size:15px;">Nový match</button>
             </div>
-            <p id="rematch-status" class="mt-6 text-yellow-500 font-bold uppercase tracking-widest text-sm"></p>
+            <p id="rematch-status" style="margin-top:20px;color:var(--gold);font-weight:700;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;min-height:20px;"></p>
         </div>
     </div>
 
-    <canvas id="game" class="block w-full h-full"></canvas>
+    <canvas id="game"></canvas>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -83,47 +271,90 @@
         const auth = getAuth(app);
         const db = getDatabase(app);
 
+        // ─── State ────────────────────────────────────────────────────────────
         let user = null;
         let currentRoom = null;
         let myIdInRoom = null;
         let players = {};
-        let myState = { x: 0, y: 0, hp: 100, angle: 0, isAttacking: false, isBlocking: false, name: '' };
+        let gameActive = false;
+        let resultShown = false;
+        let myState = { x: 400, y: 300, hp: 100, angle: 0, isAttacking: false, isBlocking: false, name: '' };
         let lastAttack = 0;
+        let lastSync = 0;
         const keys = {};
 
-        const authScreen = document.getElementById('auth-screen');
-        const matchScreen = document.getElementById('match-screen');
-        const gameUI = document.getElementById('game-ui');
-        const resultScreen = document.getElementById('result-screen');
+        // Particle system
+        let particles = [];
+        let hitFlashes = [];
+
+        // ─── Canvas setup ─────────────────────────────────────────────────────
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
 
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // ─── UI refs ──────────────────────────────────────────────────────────
+        const authScreen   = document.getElementById('auth-screen');
+        const matchScreen  = document.getElementById('match-screen');
+        const gameUI       = document.getElementById('game-ui');
+        const resultScreen = document.getElementById('result-screen');
+
+        // ─── Auth ─────────────────────────────────────────────────────────────
         document.getElementById('btn-login').onclick = () => {
-            const email = document.getElementById('auth-email').value + "@boxer.io";
-            const pass = document.getElementById('auth-pass').value;
-            signInWithEmailAndPassword(auth, email, pass).catch(err => alert("Chyba: " + err.message));
+            const email = document.getElementById('auth-email').value.trim() + "@boxer.io";
+            const pass  = document.getElementById('auth-pass').value;
+            if (!pass) return;
+            signInWithEmailAndPassword(auth, email, pass)
+                .catch(err => document.getElementById('auth-error').textContent = friendlyError(err.code));
         };
 
         document.getElementById('btn-reg').onclick = () => {
-            const email = document.getElementById('auth-email').value + "@boxer.io";
-            const pass = document.getElementById('auth-pass').value;
-            createUserWithEmailAndPassword(auth, email, pass).catch(err => alert("Chyba: " + err.message));
+            const email = document.getElementById('auth-email').value.trim() + "@boxer.io";
+            const pass  = document.getElementById('auth-pass').value;
+            if (!pass || pass.length < 6) { document.getElementById('auth-error').textContent = "Heslo musí mít alespoň 6 znaků."; return; }
+            createUserWithEmailAndPassword(auth, email, pass)
+                .catch(err => document.getElementById('auth-error').textContent = friendlyError(err.code));
         };
 
+        function friendlyError(code) {
+            const map = {
+                'auth/wrong-password': 'Špatné heslo.',
+                'auth/user-not-found': 'Účet neexistuje.',
+                'auth/email-already-in-use': 'Jméno je obsazeno.',
+                'auth/weak-password': 'Heslo je příliš slabé.',
+                'auth/invalid-credential': 'Špatné přihlašovací údaje.',
+            };
+            return map[code] || 'Chyba přihlášení.';
+        }
+
+        // ─── Auth state ───────────────────────────────────────────────────────
         onAuthStateChanged(auth, u => {
             if (u) {
                 user = u;
                 authScreen.classList.add('hidden');
                 myState.name = user.email.split('@')[0];
+                startLeaderboardListener();
                 startMatchmaking();
             }
         });
 
+        // ─── Matchmaking ──────────────────────────────────────────────────────
         async function startMatchmaking() {
+            gameActive = false;
+            resultShown = false;
             matchScreen.classList.remove('hidden');
+            matchScreen.style.display = 'flex';
             resultScreen.classList.add('hidden');
+            resultScreen.style.display = 'none';
             gameUI.classList.add('hidden');
-            
+
+            document.getElementById('room-status').textContent = 'Hledám volnou místnost...';
+
             const roomsRef = ref(db, 'rooms');
             const snapshot = await get(roomsRef);
             let foundRoom = null;
@@ -139,90 +370,178 @@
                 }
             }
 
-            if (foundRoom) joinRoom(foundRoom, '2');
-            else joinRoom(push(ref(db, 'rooms')).key, '1');
+            if (foundRoom) {
+                document.getElementById('room-status').textContent = 'Připojuji se...';
+                joinRoom(foundRoom, '2');
+            } else {
+                document.getElementById('room-status').textContent = 'Vytvářím místnost...';
+                joinRoom(push(ref(db, 'rooms')).key, '1');
+            }
         }
 
+        // ─── Join Room ────────────────────────────────────────────────────────
         function joinRoom(roomId, pId) {
             currentRoom = roomId;
-            myIdInRoom = pId;
-            document.getElementById('room-id-display').innerText = `#${roomId.slice(-5)}`;
+            myIdInRoom  = pId;
+            document.getElementById('room-id-display').textContent = `#${roomId.slice(-5)}`;
 
-            myState.x = pId === '1' ? 200 : window.innerWidth - 200;
-            myState.y = window.innerHeight / 2;
+            // FIX: use window dimensions, not canvas (canvas may not be sized yet in some edge cases)
+            myState.x  = pId === '1' ? Math.round(window.innerWidth * 0.25) : Math.round(window.innerWidth * 0.75);
+            myState.y  = Math.round(window.innerHeight / 2);
             myState.hp = 100;
+            myState.isAttacking = false;
+            myState.isBlocking  = false;
 
             const myPlayerRef = ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`);
-            set(myPlayerRef, myState);
+            set(myPlayerRef, { ...myState });
             onDisconnect(myPlayerRef).remove();
 
+            // Listen to room
             onValue(ref(db, `rooms/${currentRoom}`), (snap) => {
                 const roomData = snap.val();
                 if (!roomData) return;
-                players = roomData.players || {};
-                
-                if (players[myIdInRoom]) myState.hp = players[myIdInRoom].hp;
 
-                if (Object.keys(players).length === 2) {
+                players = roomData.players || {};
+
+                // Sync my hp from server (authoritative)
+                if (players[myIdInRoom]) {
+                    myState.hp = players[myIdInRoom].hp;
+                }
+
+                const pCount = Object.keys(players).length;
+
+                if (pCount >= 2 && !gameActive) {
+                    gameActive = true;
                     matchScreen.classList.add('hidden');
+                    matchScreen.style.display = 'none';
                     gameUI.classList.remove('hidden');
                 }
 
-                for (let id in players) {
-                    if (players[id].hp <= 0 && !resultScreen.classList.contains('flex')) {
-                        const winner = id === '1' ? players['2'] : players['1'];
-                        showResult(winner.name, id !== myIdInRoom);
+                // Update HP bars
+                updateHPBars();
+
+                // Check for winner
+                if (!resultShown && gameActive) {
+                    for (let id in players) {
+                        if (players[id].hp <= 0) {
+                            const winnerId = id === '1' ? '2' : '1';
+                            const winner = players[winnerId];
+                            if (winner) showResult(winner.name, winnerId === myIdInRoom);
+                            break;
+                        }
                     }
                 }
 
-                if (roomData.rematchRequested && roomData.rematchRequested['1'] && roomData.rematchRequested['2']) {
+                // Rematch
+                if (roomData.rematchRequested &&
+                    roomData.rematchRequested['1'] &&
+                    roomData.rematchRequested['2']) {
                     resetRoom();
                 }
             });
         }
 
+        // ─── Attack ───────────────────────────────────────────────────────────
         async function performAttack() {
+            if (myState.isBlocking || myState.isAttacking) return;
+            if (Date.now() - lastAttack < 450) return;
+            lastAttack = Date.now();
+
             myState.isAttacking = true;
             sync();
+
             const enemyId = myIdInRoom === '1' ? '2' : '1';
             const enemy = players[enemyId];
+
             if (enemy && !enemy.isBlocking && enemy.hp > 0) {
-                const dist = Math.sqrt(Math.pow(myState.x - enemy.x, 2) + Math.pow(myState.y - enemy.y, 2));
-                if (dist < 100) {
-                    const newHp = Math.max(0, enemy.hp - 15);
-                    update(ref(db, `rooms/${currentRoom}/players/${enemyId}`), { hp: newHp });
+                const dx = myState.x - enemy.x;
+                const dy = myState.y - enemy.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < 110) {
+                    const dmg = 12 + Math.floor(Math.random() * 8); // 12–19 dmg
+                    const newHp = Math.max(0, enemy.hp - dmg);
+                    await update(ref(db, `rooms/${currentRoom}/players/${enemyId}`), { hp: newHp });
+
+                    // Spawn hit flash
+                    hitFlashes.push({ x: enemy.x, y: enemy.y, r: 0, maxR: 70, alpha: 1 });
+                    spawnHitParticles(enemy.x, enemy.y);
+                    showDamageNumber(enemy.x, enemy.y, dmg);
+
                     if (newHp <= 0) {
                         const scoreRef = ref(db, `leaderboard/${user.uid}`);
-                        const snap = await get(scoreRef);
-                        set(scoreRef, { name: myState.name, wins: (snap.val()?.wins || 0) + 1 });
+                        const s = await get(scoreRef);
+                        set(scoreRef, { name: myState.name, wins: (s.val()?.wins || 0) + 1 });
                     }
                 }
             }
-            setTimeout(() => { myState.isAttacking = false; sync(); }, 150);
+
+            setTimeout(() => { myState.isAttacking = false; sync(); }, 180);
         }
 
-        function sync() { if (currentRoom && myIdInRoom) update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), myState); }
+        // ─── Sync ─────────────────────────────────────────────────────────────
+        function sync() {
+            if (currentRoom && myIdInRoom) {
+                update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), { ...myState });
+            }
+        }
 
-        onValue(ref(db, 'leaderboard'), (snap) => {
-            const data = snap.val() || {};
-            const sorted = Object.values(data).sort((a,b) => b.wins - a.wins).slice(0, 5);
-            document.getElementById('global-scores').innerHTML = sorted.map((s, i) => `
-                <div class="flex justify-between items-center text-sm font-bold">
-                    <span class="text-slate-400">${i+1}. ${s.name}</span>
-                    <span class="text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md">${s.wins}</span>
-                </div>
-            `).join('');
-        });
+        // ─── Leaderboard ──────────────────────────────────────────────────────
+        function startLeaderboardListener() {
+            onValue(ref(db, 'leaderboard'), (snap) => {
+                const data = snap.val() || {};
+                const sorted = Object.values(data).sort((a, b) => b.wins - a.wins).slice(0, 5);
+                document.getElementById('global-scores').innerHTML = sorted.map((s, i) => `
+                    <div class="leaderboard-item">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div class="rank-badge ${i === 0 ? 'gold' : ''}">${i + 1}</div>
+                            <span style="font-size:13px;font-weight:700;color:${i===0?'#fbbf24':'rgba(226,232,240,0.85)'};">${s.name}</span>
+                        </div>
+                        <span class="wins-badge">${s.wins}W</span>
+                    </div>
+                `).join('');
+            });
+        }
 
+        // ─── HP Bars ──────────────────────────────────────────────────────────
+        function updateHPBars() {
+            const p1 = players['1'];
+            const p2 = players['2'];
+            if (p1) {
+                document.getElementById('hp-name-p1').textContent = p1.name || 'Hráč 1';
+                const pct1 = Math.max(0, Math.min(100, p1.hp));
+                document.getElementById('hp-fill-p1').style.width = pct1 + '%';
+                document.getElementById('hp-fill-p1').style.background =
+                    pct1 > 50 ? 'linear-gradient(90deg, #f43f5e, #fb7185)' :
+                    pct1 > 25 ? 'linear-gradient(90deg, #f97316, #fb923c)' :
+                                'linear-gradient(90deg, #dc2626, #ef4444)';
+                document.getElementById('hp-num-p1').textContent = pct1 + ' HP';
+            }
+            if (p2) {
+                document.getElementById('hp-name-p2').textContent = p2.name || 'Hráč 2';
+                const pct2 = Math.max(0, Math.min(100, p2.hp));
+                document.getElementById('hp-fill-p2').style.width = pct2 + '%';
+                document.getElementById('hp-fill-p2').style.background =
+                    pct2 > 50 ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' :
+                    pct2 > 25 ? 'linear-gradient(90deg, #f97316, #fb923c)' :
+                                'linear-gradient(90deg, #dc2626, #ef4444)';
+                document.getElementById('hp-num-p2').textContent = pct2 + ' HP';
+            }
+        }
+
+        // ─── Result ───────────────────────────────────────────────────────────
         function showResult(winnerName, didIWin) {
+            if (resultShown) return;
+            resultShown = true;
             resultScreen.classList.remove('hidden');
-            resultScreen.classList.add('flex');
-            document.getElementById('winner-text').innerText = `${winnerName.toUpperCase()} VYHRÁL!`;
-            document.getElementById('winner-text').style.color = didIWin ? '#22c55e' : '#ef4444';
+            resultScreen.style.display = 'flex';
+            document.getElementById('result-icon').textContent = didIWin ? '🏆' : '💀';
+            document.getElementById('winner-text').textContent = `${winnerName.toUpperCase()} VYHRÁL!`;
+            document.getElementById('winner-text').style.color = didIWin ? '#22c55e' : '#f43f5e';
         }
 
         document.getElementById('btn-rematch').onclick = () => {
-            document.getElementById('rematch-status').innerText = "Čekání na soupeře...";
+            document.getElementById('rematch-status').textContent = "Čekám na soupeře...";
             update(ref(db, `rooms/${currentRoom}/rematchRequested`), { [myIdInRoom]: true });
         };
 
@@ -230,69 +549,248 @@
 
         async function resetRoom() {
             await update(ref(db, `rooms/${currentRoom}`), { rematchRequested: null });
+            resultShown = false;
             myState.hp = 100;
-            myState.x = myIdInRoom === '1' ? 200 : canvas.width - 200;
-            myState.y = canvas.height / 2;
+            // FIX: use window dims for reset too
+            myState.x  = myIdInRoom === '1' ? Math.round(window.innerWidth * 0.25) : Math.round(window.innerWidth * 0.75);
+            myState.y  = Math.round(window.innerHeight / 2);
+            myState.isAttacking = false;
+            myState.isBlocking  = false;
             sync();
-            resultScreen.classList.replace('flex', 'hidden');
-            document.getElementById('rematch-status').innerText = "";
+            resultScreen.classList.add('hidden');
+            resultScreen.style.display = 'none';
+            document.getElementById('rematch-status').textContent = '';
         }
 
-        window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
-        window.onresize();
-        window.oncontextmenu = (e) => e.preventDefault();
-        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
-        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
-        
-        canvas.onmousemove = (e) => { myState.angle = Math.atan2(e.clientY - myState.y, e.clientX - myState.x); sync(); };
-        canvas.onmousedown = (e) => {
-            if (e.button === 0 && !myState.isBlocking && Date.now() - lastAttack > 500) { performAttack(); lastAttack = Date.now(); }
+        // ─── Input ────────────────────────────────────────────────────────────
+        window.addEventListener('contextmenu', e => e.preventDefault());
+        window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
+
+        canvas.addEventListener('mousemove', e => {
+            myState.angle = Math.atan2(e.clientY - myState.y, e.clientX - myState.x);
+            // No sync here — loop handles it at 60fps
+        });
+
+        canvas.addEventListener('mousedown', e => {
+            if (!gameActive || resultShown) return;
+            if (e.button === 0) performAttack();
             if (e.button === 2) { myState.isBlocking = true; sync(); }
-        };
-        canvas.onmouseup = (e) => { if (e.button === 2) { myState.isBlocking = false; sync(); } };
+        });
 
-        function loop() {
-            if (matchScreen.classList.contains('hidden') && !resultScreen.classList.contains('flex')) {
-                const speed = 7;
-                let moved = false;
-                if (keys['w'] || keys['arrowup']) { myState.y -= speed; moved = true; }
-                if (keys['s'] || keys['arrowdown']) { myState.y += speed; moved = true; }
-                if (keys['a'] || keys['arrowleft']) { myState.x -= speed; moved = true; }
-                if (keys['d'] || keys['arrowright']) { myState.x += speed; moved = true; }
-                if (moved) {
-                    myState.x = Math.max(30, Math.min(canvas.width - 30, myState.x));
-                    myState.y = Math.max(30, Math.min(canvas.height - 30, myState.y));
-                    sync();
-                }
+        canvas.addEventListener('mouseup', e => {
+            if (e.button === 2) { myState.isBlocking = false; sync(); }
+        });
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                for (let id in players) {
-                    const p = players[id];
-                    ctx.save();
-                    ctx.translate(p.x, p.y);
-                    ctx.rotate(p.angle);
-                    ctx.fillStyle = p.isBlocking ? '#3b82f6' : (id === '1' ? '#f87171' : '#60a5fa');
-                    ctx.beginPath(); ctx.roundRect(-30, -30, 60, 60, 12); ctx.fill();
-                    ctx.fillStyle = "white";
-                    ctx.beginPath(); ctx.arc(15, -12, 6, 0, Math.PI*2); ctx.fill();
-                    ctx.beginPath(); ctx.arc(15, 12, 6, 0, Math.PI*2); ctx.fill();
-                    if (p.isAttacking) {
-                        ctx.fillStyle = "white"; ctx.shadowBlur = 15; ctx.shadowColor = "white";
-                        ctx.beginPath(); ctx.arc(50, 0, 18, 0, Math.PI*2); ctx.fill();
-                        ctx.shadowBlur = 0;
-                    }
-                    ctx.restore();
-                    
-                    ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 13px sans-serif";
-                    ctx.fillText(p.name, p.x, p.y - 85);
-                    ctx.fillStyle = "#1e293b"; ctx.roundRect(p.x - 40, p.y - 72, 80, 8, 4); ctx.fill();
-                    ctx.fillStyle = p.hp > 30 ? "#22c55e" : "#ef4444";
-                    ctx.roundRect(p.x - 40, p.y - 72, (p.hp / 100) * 80, 8, 4); ctx.fill();
-                }
+        // ─── Particles ────────────────────────────────────────────────────────
+        function spawnHitParticles(x, y) {
+            for (let i = 0; i < 12; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 5;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1,
+                    size: 3 + Math.random() * 5,
+                    color: Math.random() > 0.5 ? '#f43f5e' : '#fbbf24'
+                });
             }
-            requestAnimationFrame(loop);
         }
-        loop();
+
+        function showDamageNumber(x, y, dmg) {
+            const el = document.createElement('div');
+            el.className = 'dmg-number';
+            el.textContent = `-${dmg}`;
+            el.style.left = (x - 20 + (Math.random() - 0.5) * 40) + 'px';
+            el.style.top  = (y - 50) + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 700);
+        }
+
+        // ─── Arena drawing ───────────────────────────────────────────────────
+        function drawArena() {
+            const w = canvas.width, h = canvas.height;
+
+            // Background gradient
+            const bg = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w,h)*0.7);
+            bg.addColorStop(0, '#0c1525');
+            bg.addColorStop(1, '#050810');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, w, h);
+
+            // Arena circle
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(w/2, h/2, Math.min(w, h) * 0.44, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(59,130,246,0.12)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Inner glow
+            const glow = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.min(w,h)*0.44);
+            glow.addColorStop(0, 'rgba(59,130,246,0.03)');
+            glow.addColorStop(1, 'transparent');
+            ctx.fillStyle = glow;
+            ctx.fill();
+
+            // Center cross
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(w/2, h/2 - 30); ctx.lineTo(w/2, h/2 + 30); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(w/2 - 30, h/2); ctx.lineTo(w/2 + 30, h/2); ctx.stroke();
+            ctx.restore();
+        }
+
+        // ─── Draw player ──────────────────────────────────────────────────────
+        function drawPlayer(p, id) {
+            const isP1 = id === '1';
+            const baseColor = isP1 ? '#f43f5e' : '#3b82f6';
+            const blockColor = '#fbbf24';
+
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.angle);
+
+            // Shadow
+            ctx.shadowColor = p.isBlocking ? 'rgba(251,191,36,0.5)' : (isP1 ? 'rgba(244,63,94,0.4)' : 'rgba(59,130,246,0.4)');
+            ctx.shadowBlur = p.isBlocking ? 30 : 20;
+
+            // Body
+            const bodyColor = p.isBlocking ? blockColor : baseColor;
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            roundedRect(ctx, -28, -28, 56, 56, 12);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Shine
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            ctx.beginPath();
+            roundedRect(ctx, -22, -22, 36, 20, 8);
+            ctx.fill();
+
+            // Eyes
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath(); ctx.arc(14, -10, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(14,  10, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.beginPath(); ctx.arc(16, -10, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(16,  10, 2.5, 0, Math.PI * 2); ctx.fill();
+
+            // Block shield
+            if (p.isBlocking) {
+                ctx.strokeStyle = 'rgba(251,191,36,0.6)';
+                ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.arc(0, 0, 40, -Math.PI/2, Math.PI/2); ctx.stroke();
+            }
+
+            // Attack fist
+            if (p.isAttacking) {
+                const t = (Date.now() % 200) / 200;
+                ctx.shadowColor = 'white';
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(48 + t * 10, 0, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            ctx.restore();
+
+            // Name tag
+            ctx.save();
+            ctx.font = 'bold 12px DM Sans, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.fillText(p.name, p.x, p.y - 42);
+            ctx.restore();
+        }
+
+        // ─── Helper: roundedRect ──────────────────────────────────────────────
+        function roundedRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        // ─── Main loop ────────────────────────────────────────────────────────
+        let lastFrame = 0;
+        function loop(ts) {
+            const dt = ts - lastFrame;
+            lastFrame = ts;
+            requestAnimationFrame(loop);
+
+            if (!gameActive || resultShown) return;
+
+            // Movement
+            const speed = 5;
+            let moved = false;
+            if (keys['w'] || keys['arrowup'])    { myState.y -= speed; moved = true; }
+            if (keys['s'] || keys['arrowdown'])   { myState.y += speed; moved = true; }
+            if (keys['a'] || keys['arrowleft'])   { myState.x -= speed; moved = true; }
+            if (keys['d'] || keys['arrowright'])  { myState.x += speed; moved = true; }
+
+            if (moved) {
+                myState.x = Math.max(30, Math.min(canvas.width  - 30, myState.x));
+                myState.y = Math.max(30, Math.min(canvas.height - 30, myState.y));
+            }
+
+            // Sync at ~20fps to avoid Firebase hammering
+            if (ts - lastSync > 50) {
+                sync();
+                lastSync = ts;
+            }
+
+            // ── Render ──
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawArena();
+
+            // Hit flashes
+            for (let i = hitFlashes.length - 1; i >= 0; i--) {
+                const f = hitFlashes[i];
+                ctx.save();
+                ctx.globalAlpha = f.alpha;
+                const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
+                grad.addColorStop(0, 'rgba(255,255,255,0.6)');
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+                f.r += 4; f.alpha -= 0.06;
+                if (f.alpha <= 0) hitFlashes.splice(i, 1);
+            }
+
+            // Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                ctx.save();
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+                p.x += p.vx; p.y += p.vy;
+                p.vy += 0.2;
+                p.life -= 0.05;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Players
+            for (let id in players) {
+                drawPlayer(players[id], id);
+            }
+        }
+
+        requestAnimationFrame(loop);
     </script>
 </body>
 </html>
