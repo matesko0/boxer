@@ -13,7 +13,6 @@
 </head>
 <body class="text-white font-sans overflow-hidden">
 
-    <!-- LOGIN / REGISTER SCREEN -->
     <div id="auth-screen" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950">
         <div class="glass p-8 rounded-3xl w-full max-w-md shadow-2xl border-blue-500/20 border-2">
             <h1 class="text-4xl font-black mb-6 text-center tracking-tighter">BOXER<span class="text-blue-500">.IO</span></h1>
@@ -21,52 +20,45 @@
                 <input id="auth-email" type="text" placeholder="Uživatelské jméno" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl focus:outline-none focus:border-blue-500 transition-all">
                 <input id="auth-pass" type="password" placeholder="Heslo" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl focus:outline-none focus:border-blue-500 transition-all">
                 <div class="flex gap-2">
-                    <button id="btn-login" class="flex-1 bg-blue-600 hover:bg-blue-500 p-3 rounded-xl font-bold transition-all">Přihlásit</button>
-                    <button id="btn-reg" class="flex-1 bg-slate-700 hover:bg-slate-600 p-3 rounded-xl font-bold transition-all">Registrovat</button>
+                    <button id="btn-login" class="flex-1 bg-blue-600 hover:bg-blue-500 p-3 rounded-xl font-bold transition-all text-sm uppercase">Přihlásit</button>
+                    <button id="btn-reg" class="flex-1 bg-slate-700 hover:bg-slate-600 p-3 rounded-xl font-bold transition-all text-sm uppercase">Registrovat</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- MATCHMAKING SCREEN -->
-    <div id="match-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md">
+    <div id="match-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950">
         <div class="text-center">
             <div class="inline-block w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
             <h2 class="text-2xl font-bold italic animate-pulse">HLEDÁNÍ SOUPEŘE...</h2>
-            <p id="room-status" class="text-slate-500 mt-2">Připojování k serveru</p>
+            <p id="room-status" class="text-slate-500 mt-2 font-mono">Připojování k aréně</p>
         </div>
     </div>
 
-    <!-- MAIN GAME UI -->
     <div id="game-ui" class="hidden">
-        <!-- Top Bar -->
-        <div class="absolute top-4 left-4 pointer-events-none z-10 flex gap-4 items-start">
-            <div class="glass p-4 rounded-2xl flex flex-col min-w-[150px]">
-                <span class="text-[10px] text-slate-500 font-black uppercase">Místnost</span>
+        <div class="absolute top-4 left-4 pointer-events-none z-10 flex gap-4">
+            <div class="glass p-4 rounded-2xl flex flex-col min-w-[120px]">
+                <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Místnost</span>
                 <span id="room-id-display" class="text-lg font-black text-blue-400">#---</span>
             </div>
         </div>
 
-        <!-- Global Scoreboard (Right Side) -->
         <div class="absolute top-4 right-4 pointer-events-none z-10">
             <div class="glass p-5 rounded-3xl w-64 shadow-2xl border-l-4 border-blue-500">
-                <h3 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Leaderboard</h3>
-                <div id="global-scores" class="space-y-3">
-                    <!-- Scores injected here -->
-                </div>
+                <h3 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Top 5 Boxeři</h3>
+                <div id="global-scores" class="space-y-3"></div>
             </div>
         </div>
     </div>
 
-    <!-- KO / REMATCH MODAL -->
     <div id="result-screen" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-xl">
-        <div class="text-center">
-            <h1 id="winner-text" class="text-8xl font-black mb-8 italic tracking-tighter">HRÁČ VYHRÁL!</h1>
+        <div class="text-center p-12 glass rounded-[3rem] border-2 border-white/10">
+            <h1 id="winner-text" class="text-7xl font-black mb-8 italic tracking-tighter">VÍTĚZ!</h1>
             <div class="flex gap-4 justify-center">
-                <button id="btn-rematch" class="bg-blue-600 hover:bg-blue-500 px-8 py-4 rounded-2xl font-black text-xl transition-all uppercase">Rematch</button>
-                <button id="btn-new-match" class="bg-slate-700 hover:bg-slate-600 px-8 py-4 rounded-2xl font-black text-xl transition-all uppercase">Najít jinou hru</button>
+                <button id="btn-rematch" class="bg-blue-600 hover:bg-blue-500 px-10 py-5 rounded-2xl font-black text-xl transition-all uppercase shadow-lg shadow-blue-500/20">Odveta</button>
+                <button id="btn-new-match" class="bg-slate-700 hover:bg-slate-600 px-10 py-5 rounded-2xl font-black text-xl transition-all uppercase">Další match</button>
             </div>
-            <p id="rematch-status" class="mt-4 text-slate-500 font-bold uppercase tracking-widest"></p>
+            <p id="rematch-status" class="mt-6 text-yellow-500 font-bold uppercase tracking-widest text-sm"></p>
         </div>
     </div>
 
@@ -77,10 +69,9 @@
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getDatabase, ref, set, onValue, onDisconnect, update, get, remove, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // --- KONFIGURACE (Tvoje údaje) ---
         const firebaseConfig = {
             apiKey: "AIzaSyCJdPiQ-diG_VnRGq6vnZshVUhViPmy_Qk",
-            authDomain: "boxer-e8def.firebaseapp.com",
+            authDomain: "boxer-def.firebaseapp.com",
             databaseURL: "https://boxer-e8def-default-rtdb.europe-west1.firebasedatabase.app",
             projectId: "boxer-e8def",
             storageBucket: "boxer-e8def.firebasestorage.app",
@@ -92,7 +83,6 @@
         const auth = getAuth(app);
         const db = getDatabase(app);
 
-        // --- HERNÍ PROMĚNNÉ ---
         let user = null;
         let currentRoom = null;
         let myIdInRoom = null;
@@ -101,7 +91,6 @@
         let lastAttack = 0;
         const keys = {};
 
-        // --- UI ELEMENTY ---
         const authScreen = document.getElementById('auth-screen');
         const matchScreen = document.getElementById('match-screen');
         const gameUI = document.getElementById('game-ui');
@@ -109,7 +98,6 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
 
-        // --- AUTH LOGIKA ---
         document.getElementById('btn-login').onclick = () => {
             const email = document.getElementById('auth-email').value + "@boxer.io";
             const pass = document.getElementById('auth-pass').value;
@@ -131,12 +119,11 @@
             }
         });
 
-        // --- MATCHMAKING & ROOMS ---
         async function startMatchmaking() {
             matchScreen.classList.remove('hidden');
             resultScreen.classList.add('hidden');
             gameUI.classList.add('hidden');
-
+            
             const roomsRef = ref(db, 'rooms');
             const snapshot = await get(roomsRef);
             let foundRoom = null;
@@ -144,19 +131,16 @@
             if (snapshot.exists()) {
                 const rooms = snapshot.val();
                 for (let id in rooms) {
-                    if (Object.keys(rooms[id].players || {}).length === 1 && !rooms[id].gameStarted) {
+                    const pCount = Object.keys(rooms[id].players || {}).length;
+                    if (pCount === 1) {
                         foundRoom = id;
                         break;
                     }
                 }
             }
 
-            if (foundRoom) {
-                joinRoom(foundRoom, '2');
-            } else {
-                const newRoomId = push(ref(db, 'rooms')).key;
-                joinRoom(newRoomId, '1');
-            }
+            if (foundRoom) joinRoom(foundRoom, '2');
+            else joinRoom(push(ref(db, 'rooms')).key, '1');
         }
 
         function joinRoom(roomId, pId) {
@@ -164,30 +148,26 @@
             myIdInRoom = pId;
             document.getElementById('room-id-display').innerText = `#${roomId.slice(-5)}`;
 
-            myState.x = pId === '1' ? 200 : canvas.width - 200;
-            myState.y = canvas.height / 2;
+            myState.x = pId === '1' ? 200 : window.innerWidth - 200;
+            myState.y = window.innerHeight / 2;
             myState.hp = 100;
-            myState.rematch = false;
 
             const myPlayerRef = ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`);
             set(myPlayerRef, myState);
             onDisconnect(myPlayerRef).remove();
 
-            // Sledování změn v místnosti
             onValue(ref(db, `rooms/${currentRoom}`), (snap) => {
                 const roomData = snap.val();
                 if (!roomData) return;
-                
                 players = roomData.players || {};
+                
                 if (players[myIdInRoom]) myState.hp = players[myIdInRoom].hp;
 
-                // Spuštění hry když jsou dva
                 if (Object.keys(players).length === 2) {
                     matchScreen.classList.add('hidden');
                     gameUI.classList.remove('hidden');
                 }
 
-                // Kontrola KO
                 for (let id in players) {
                     if (players[id].hp <= 0 && !resultScreen.classList.contains('flex')) {
                         const winner = id === '1' ? players['2'] : players['1'];
@@ -195,18 +175,10 @@
                     }
                 }
 
-                // Kontrola Rematch logiky
                 if (roomData.rematchRequested && roomData.rematchRequested['1'] && roomData.rematchRequested['2']) {
                     resetRoom();
                 }
             });
-        }
-
-        // --- GAMEPLAY LOGIKA ---
-        function sync() {
-            if (currentRoom && myIdInRoom) {
-                update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), myState);
-            }
         }
 
         async function performAttack() {
@@ -214,15 +186,12 @@
             sync();
             const enemyId = myIdInRoom === '1' ? '2' : '1';
             const enemy = players[enemyId];
-
             if (enemy && !enemy.isBlocking && enemy.hp > 0) {
                 const dist = Math.sqrt(Math.pow(myState.x - enemy.x, 2) + Math.pow(myState.y - enemy.y, 2));
-                if (dist < 110) {
+                if (dist < 100) {
                     const newHp = Math.max(0, enemy.hp - 15);
                     update(ref(db, `rooms/${currentRoom}/players/${enemyId}`), { hp: newHp });
-                    
                     if (newHp <= 0) {
-                        // Přidat bod do globálního skóre
                         const scoreRef = ref(db, `leaderboard/${user.uid}`);
                         const snap = await get(scoreRef);
                         set(scoreRef, { name: myState.name, wins: (snap.val()?.wins || 0) + 1 });
@@ -232,24 +201,23 @@
             setTimeout(() => { myState.isAttacking = false; sync(); }, 150);
         }
 
-        // --- SCOREBOARD ---
+        function sync() { if (currentRoom && myIdInRoom) update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), myState); }
+
         onValue(ref(db, 'leaderboard'), (snap) => {
             const data = snap.val() || {};
             const sorted = Object.values(data).sort((a,b) => b.wins - a.wins).slice(0, 5);
-            const container = document.getElementById('global-scores');
-            container.innerHTML = sorted.map((s, i) => `
-                <div class="flex justify-between items-center text-sm">
-                    <span class="font-bold text-slate-300">${i+1}. ${s.name}</span>
-                    <span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg font-black">${s.wins}</span>
+            document.getElementById('global-scores').innerHTML = sorted.map((s, i) => `
+                <div class="flex justify-between items-center text-sm font-bold">
+                    <span class="text-slate-400">${i+1}. ${s.name}</span>
+                    <span class="text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md">${s.wins}</span>
                 </div>
             `).join('');
         });
 
-        // --- REMATCH / NAVIGACE ---
         function showResult(winnerName, didIWin) {
             resultScreen.classList.remove('hidden');
             resultScreen.classList.add('flex');
-            document.getElementById('winner-text').innerText = `${winnerName} VYHRÁL!`;
+            document.getElementById('winner-text').innerText = `${winnerName.toUpperCase()} VYHRÁL!`;
             document.getElementById('winner-text').style.color = didIWin ? '#22c55e' : '#ef4444';
         }
 
@@ -258,10 +226,7 @@
             update(ref(db, `rooms/${currentRoom}/rematchRequested`), { [myIdInRoom]: true });
         };
 
-        document.getElementById('btn-new-match').onclick = () => {
-            remove(ref(db, `rooms/${currentRoom}`));
-            location.reload(); // Nejrychlejší způsob jak vyčistit stav
-        };
+        document.getElementById('btn-new-match').onclick = () => location.reload();
 
         async function resetRoom() {
             await update(ref(db, `rooms/${currentRoom}`), { rematchRequested: null });
@@ -269,20 +234,15 @@
             myState.x = myIdInRoom === '1' ? 200 : canvas.width - 200;
             myState.y = canvas.height / 2;
             sync();
-            resultScreen.classList.add('hidden');
-            resultScreen.classList.remove('flex');
+            resultScreen.classList.replace('flex', 'hidden');
             document.getElementById('rematch-status').innerText = "";
         }
 
-        function resetAllScores() { set(ref(db, 'leaderboard'), null); }
-
-        // --- ENGINE ---
         window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
         window.onresize();
         window.oncontextmenu = (e) => e.preventDefault();
-
-        window.onkeydown = (e) => { keys[e.key.toLowerCase()] = true; };
-        window.onkeyup = (e) => { keys[e.key.toLowerCase()] = false; if (e.button === 2 || e.key === 'b') { myState.isBlocking = false; sync(); } };
+        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
+        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
         
         canvas.onmousemove = (e) => { myState.angle = Math.atan2(e.clientY - myState.y, e.clientX - myState.x); sync(); };
         canvas.onmousedown = (e) => {
@@ -292,40 +252,43 @@
         canvas.onmouseup = (e) => { if (e.button === 2) { myState.isBlocking = false; sync(); } };
 
         function loop() {
-            if (!matchScreen.classList.contains('hidden') || resultScreen.classList.contains('flex')) {
-                requestAnimationFrame(loop);
-                return;
-            }
+            if (matchScreen.classList.contains('hidden') && !resultScreen.classList.contains('flex')) {
+                const speed = 7;
+                let moved = false;
+                if (keys['w'] || keys['arrowup']) { myState.y -= speed; moved = true; }
+                if (keys['s'] || keys['arrowdown']) { myState.y += speed; moved = true; }
+                if (keys['a'] || keys['arrowleft']) { myState.x -= speed; moved = true; }
+                if (keys['d'] || keys['arrowright']) { myState.x += speed; moved = true; }
+                if (moved) {
+                    myState.x = Math.max(30, Math.min(canvas.width - 30, myState.x));
+                    myState.y = Math.max(30, Math.min(canvas.height - 30, myState.y));
+                    sync();
+                }
 
-            const speed = 7;
-            let moved = false;
-            if ((keys['w'] || keys['arrowup'])) { myState.y -= speed; moved = true; }
-            if ((keys['s'] || keys['arrowdown'])) { myState.y += speed; moved = true; }
-            if ((keys['a'] || keys['arrowleft'])) { myState.x -= speed; moved = true; }
-            if ((keys['d'] || keys['arrowright'])) { myState.x += speed; moved = true; }
-            if (moved) sync();
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Draw players... (stejná draw logika jako minule)
-            for (let id in players) {
-                const p = players[id];
-                ctx.save();
-                ctx.translate(p.x, p.y);
-                ctx.rotate(p.angle);
-                ctx.fillStyle = p.isBlocking ? '#3b82f6' : (id === '1' ? '#f87171' : '#60a5fa');
-                ctx.beginPath(); ctx.roundRect(-30, -30, 60, 60, 12); ctx.fill();
-                ctx.fillStyle = "white";
-                ctx.beginPath(); ctx.arc(15, -12, 5, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(15, 12, 5, 0, Math.PI*2); ctx.fill();
-                if (p.isAttacking) { ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(45, 0, 15, 0, Math.PI*2); ctx.fill(); }
-                ctx.restore();
-                
-                // HP & Name
-                ctx.fillStyle = "white"; ctx.textAlign = "center";
-                ctx.font = "bold 12px sans-serif";
-                ctx.fillText(p.name, p.x, p.y - 80);
-                ctx.fillStyle = "#1e293b"; ctx.roundRect(p.x - 40, p.y - 70, 80, 8, 4); ctx.fill();
-                ctx.fillStyle = p.hp > 30 ? "#22c55e" : "#ef4444"; ctx.roundRect(p.x - 40, p.y - 70, (p.hp / 100) * 80, 8, 4); ctx.fill();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                for (let id in players) {
+                    const p = players[id];
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.angle);
+                    ctx.fillStyle = p.isBlocking ? '#3b82f6' : (id === '1' ? '#f87171' : '#60a5fa');
+                    ctx.beginPath(); ctx.roundRect(-30, -30, 60, 60, 12); ctx.fill();
+                    ctx.fillStyle = "white";
+                    ctx.beginPath(); ctx.arc(15, -12, 6, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(15, 12, 6, 0, Math.PI*2); ctx.fill();
+                    if (p.isAttacking) {
+                        ctx.fillStyle = "white"; ctx.shadowBlur = 15; ctx.shadowColor = "white";
+                        ctx.beginPath(); ctx.arc(50, 0, 18, 0, Math.PI*2); ctx.fill();
+                        ctx.shadowBlur = 0;
+                    }
+                    ctx.restore();
+                    
+                    ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 13px sans-serif";
+                    ctx.fillText(p.name, p.x, p.y - 85);
+                    ctx.fillStyle = "#1e293b"; ctx.roundRect(p.x - 40, p.y - 72, 80, 8, 4); ctx.fill();
+                    ctx.fillStyle = p.hp > 30 ? "#22c55e" : "#ef4444";
+                    ctx.roundRect(p.x - 40, p.y - 72, (p.hp / 100) * 80, 8, 4); ctx.fill();
+                }
             }
             requestAnimationFrame(loop);
         }
