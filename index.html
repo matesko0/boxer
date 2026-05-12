@@ -255,7 +255,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getDatabase, ref, set, onValue, onDisconnect, update, get, remove, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, onDisconnect, update, get, push, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCJdPiQ-diG_VnRGq6vnZshVUhViPmy_Qk",
@@ -275,15 +275,28 @@
         let user = null;
         let currentRoom = null;
         let myIdInRoom = null;
-        let players = {};
         let gameActive = false;
         let resultShown = false;
-        let myState = { x: 400, y: 300, hp: 100, angle: 0, isAttacking: false, isBlocking: false, name: '' };
-        let lastAttack = 0;
-        let lastSync = 0;
-        const keys = {};
 
-        // Particle system
+        // MY state — runs locally at 60fps, never waits for Firebase
+        let my = { x: 400, y: 300, hp: 100, angle: 0, isAttacking: false, isBlocking: false, name: '' };
+
+        // ENEMY state — comes from Firebase, interpolated smoothly
+        let enemy = null;          // raw latest from Firebase
+        let enemyRender = null;    // interpolated render state
+
+        // Sync control — we send position at 20hz, angle at 10hz
+        let lastSyncPos   = 0;
+        let lastSyncAngle = 0;
+        let lastPosX = -1, lastPosY = -1;
+        let lastAngle = -999;
+        let lastBlock = false;
+
+        let lastAttack = 0;
+        const keys = {};
+        let mouseX = 0, mouseY = 0;
+
+        // Particles
         let particles = [];
         let hitFlashes = [];
 
@@ -337,7 +350,7 @@
             if (u) {
                 user = u;
                 authScreen.classList.add('hidden');
-                myState.name = user.email.split('@')[0];
+                my.name = user.email.split('@')[0];
                 startLeaderboardListener();
                 startMatchmaking();
             }
@@ -385,105 +398,120 @@
             myIdInRoom  = pId;
             document.getElementById('room-id-display').textContent = `#${roomId.slice(-5)}`;
 
-            // FIX: use window dimensions, not canvas (canvas may not be sized yet in some edge cases)
-            myState.x  = pId === '1' ? Math.round(window.innerWidth * 0.25) : Math.round(window.innerWidth * 0.75);
-            myState.y  = Math.round(window.innerHeight / 2);
-            myState.hp = 100;
-            myState.isAttacking = false;
-            myState.isBlocking  = false;
+            my.x  = pId === '1' ? Math.round(window.innerWidth * 0.25) : Math.round(window.innerWidth * 0.75);
+            my.y  = Math.round(window.innerHeight / 2);
+            my.hp = 100;
+            my.isAttacking = false;
+            my.isBlocking  = false;
 
             const myPlayerRef = ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`);
-            set(myPlayerRef, { ...myState });
+            set(myPlayerRef, { x: my.x, y: my.y, hp: my.hp, angle: my.angle, isAttacking: false, isBlocking: false, name: my.name });
             onDisconnect(myPlayerRef).remove();
 
-            // Listen to room
-            onValue(ref(db, `rooms/${currentRoom}`), (snap) => {
-                const roomData = snap.val();
-                if (!roomData) return;
+            const enemyId = myIdInRoom === '1' ? '2' : '1';
 
-                players = roomData.players || {};
-
-                // Sync my hp from server (authoritative)
-                if (players[myIdInRoom]) {
-                    myState.hp = players[myIdInRoom].hp;
-                }
-
-                const pCount = Object.keys(players).length;
-
-                if (pCount >= 2 && !gameActive) {
-                    gameActive = true;
-                    matchScreen.classList.add('hidden');
-                    matchScreen.style.display = 'none';
-                    gameUI.classList.remove('hidden');
-                }
-
-                // Update HP bars
+            // ── Listen ONLY to my own HP (to detect damage) ──────────────────
+            onValue(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}/hp`), (snap) => {
+                if (snap.exists()) my.hp = snap.val();
                 updateHPBars();
-
-                // Check for winner
-                if (!resultShown && gameActive) {
-                    for (let id in players) {
-                        if (players[id].hp <= 0) {
-                            const winnerId = id === '1' ? '2' : '1';
-                            const winner = players[winnerId];
-                            if (winner) showResult(winner.name, winnerId === myIdInRoom);
-                            break;
-                        }
-                    }
-                }
-
-                // Rematch
-                if (roomData.rematchRequested &&
-                    roomData.rematchRequested['1'] &&
-                    roomData.rematchRequested['2']) {
-                    resetRoom();
+                if (!resultShown && gameActive && my.hp <= 0) {
+                    // I died — enemy wins
+                    if (enemy) showResult(enemy.name, false);
                 }
             });
+
+            // ── Listen to enemy position (separate path = fewer triggers) ────
+            onValue(ref(db, `rooms/${currentRoom}/players/${enemyId}`), (snap) => {
+                if (!snap.exists()) return;
+                const d = snap.val();
+                if (!enemy) {
+                    // First time enemy appears
+                    enemy = { ...d };
+                    enemyRender = { ...d };
+                    if (!gameActive) {
+                        gameActive = true;
+                        matchScreen.classList.add('hidden');
+                        matchScreen.style.display = 'none';
+                        gameUI.classList.remove('hidden');
+                    }
+                } else {
+                    enemy = { ...d };
+                }
+                updateHPBars();
+                if (!resultShown && gameActive && enemy.hp <= 0) {
+                    showResult(my.name, true);
+                }
+            });
+
+            // ── Listen to rematch signal ──────────────────────────────────────
+            onValue(ref(db, `rooms/${currentRoom}/rematchRequested`), (snap) => {
+                const d = snap.val();
+                if (d && d['1'] && d['2']) resetRoom();
+            });
+        }
+
+        // ─── Optimized sync — only sends what changed ─────────────────────────
+        function syncPosition(now) {
+            if (!currentRoom || !myIdInRoom) return;
+            const posChanged  = my.x !== lastPosX || my.y !== lastPosY;
+            const angleChanged = Math.abs(my.angle - lastAngle) > 0.015;
+            const blockChanged = my.isBlocking !== lastBlock;
+
+            const changes = {};
+            if (posChanged && now - lastSyncPos > 50) {   // 20hz
+                changes.x = Math.round(my.x);
+                changes.y = Math.round(my.y);
+                lastPosX = my.x; lastPosY = my.y;
+                lastSyncPos = now;
+            }
+            if (angleChanged && now - lastSyncAngle > 100) { // 10hz
+                changes.angle = +my.angle.toFixed(3);
+                lastAngle = my.angle;
+                lastSyncAngle = now;
+            }
+            if (blockChanged) {
+                changes.isBlocking = my.isBlocking;
+                lastBlock = my.isBlocking;
+            }
+            if (Object.keys(changes).length > 0) {
+                update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), changes);
+            }
         }
 
         // ─── Attack ───────────────────────────────────────────────────────────
         async function performAttack() {
-            if (myState.isBlocking || myState.isAttacking) return;
+            if (my.isBlocking || my.isAttacking) return;
             if (Date.now() - lastAttack < 450) return;
             lastAttack = Date.now();
 
-            myState.isAttacking = true;
-            sync();
+            my.isAttacking = true;
+            update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), { isAttacking: true });
 
             const enemyId = myIdInRoom === '1' ? '2' : '1';
-            const enemy = players[enemyId];
-
             if (enemy && !enemy.isBlocking && enemy.hp > 0) {
-                const dx = myState.x - enemy.x;
-                const dy = myState.y - enemy.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-
-                if (dist < 110) {
-                    const dmg = 12 + Math.floor(Math.random() * 8); // 12–19 dmg
+                const dx = my.x - enemy.x;
+                const dy = my.y - enemy.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 110) {
+                    const dmg = 12 + Math.floor(Math.random() * 8);
                     const newHp = Math.max(0, enemy.hp - dmg);
-                    await update(ref(db, `rooms/${currentRoom}/players/${enemyId}`), { hp: newHp });
+                    update(ref(db, `rooms/${currentRoom}/players/${enemyId}`), { hp: newHp });
 
-                    // Spawn hit flash
-                    hitFlashes.push({ x: enemy.x, y: enemy.y, r: 0, maxR: 70, alpha: 1 });
+                    hitFlashes.push({ x: enemy.x, y: enemy.y, r: 0, alpha: 1 });
                     spawnHitParticles(enemy.x, enemy.y);
                     showDamageNumber(enemy.x, enemy.y, dmg);
 
                     if (newHp <= 0) {
                         const scoreRef = ref(db, `leaderboard/${user.uid}`);
                         const s = await get(scoreRef);
-                        set(scoreRef, { name: myState.name, wins: (s.val()?.wins || 0) + 1 });
+                        set(scoreRef, { name: my.name, wins: (s.val()?.wins || 0) + 1 });
                     }
                 }
             }
 
-            setTimeout(() => { myState.isAttacking = false; sync(); }, 180);
-        }
-
-        // ─── Sync ─────────────────────────────────────────────────────────────
-        function sync() {
-            if (currentRoom && myIdInRoom) {
-                update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), { ...myState });
-            }
+            setTimeout(() => {
+                my.isAttacking = false;
+                update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), { isAttacking: false });
+            }, 180);
         }
 
         // ─── Leaderboard ──────────────────────────────────────────────────────
@@ -505,28 +533,23 @@
 
         // ─── HP Bars ──────────────────────────────────────────────────────────
         function updateHPBars() {
-            const p1 = players['1'];
-            const p2 = players['2'];
-            if (p1) {
-                document.getElementById('hp-name-p1').textContent = p1.name || 'Hráč 1';
-                const pct1 = Math.max(0, Math.min(100, p1.hp));
-                document.getElementById('hp-fill-p1').style.width = pct1 + '%';
-                document.getElementById('hp-fill-p1').style.background =
-                    pct1 > 50 ? 'linear-gradient(90deg, #f43f5e, #fb7185)' :
-                    pct1 > 25 ? 'linear-gradient(90deg, #f97316, #fb923c)' :
-                                'linear-gradient(90deg, #dc2626, #ef4444)';
-                document.getElementById('hp-num-p1').textContent = pct1 + ' HP';
+            const p1data = myIdInRoom === '1' ? my : enemy;
+            const p2data = myIdInRoom === '2' ? my : enemy;
+
+            function applyBar(fillId, numId, nameId, data, isLeft) {
+                if (!data) return;
+                document.getElementById(nameId).textContent = data.name || '?';
+                const pct = Math.max(0, Math.min(100, data.hp));
+                document.getElementById(fillId).style.width = pct + '%';
+                document.getElementById(fillId).style.background =
+                    pct > 50 ? (isLeft ? 'linear-gradient(90deg,#f43f5e,#fb7185)' : 'linear-gradient(90deg,#3b82f6,#60a5fa)') :
+                    pct > 25 ? 'linear-gradient(90deg,#f97316,#fb923c)' :
+                               'linear-gradient(90deg,#dc2626,#ef4444)';
+                document.getElementById(numId).textContent = pct + ' HP';
             }
-            if (p2) {
-                document.getElementById('hp-name-p2').textContent = p2.name || 'Hráč 2';
-                const pct2 = Math.max(0, Math.min(100, p2.hp));
-                document.getElementById('hp-fill-p2').style.width = pct2 + '%';
-                document.getElementById('hp-fill-p2').style.background =
-                    pct2 > 50 ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' :
-                    pct2 > 25 ? 'linear-gradient(90deg, #f97316, #fb923c)' :
-                                'linear-gradient(90deg, #dc2626, #ef4444)';
-                document.getElementById('hp-num-p2').textContent = pct2 + ' HP';
-            }
+
+            applyBar('hp-fill-p1', 'hp-num-p1', 'hp-name-p1', p1data, true);
+            applyBar('hp-fill-p2', 'hp-num-p2', 'hp-name-p2', p2data, false);
         }
 
         // ─── Result ───────────────────────────────────────────────────────────
@@ -536,7 +559,7 @@
             resultScreen.classList.remove('hidden');
             resultScreen.style.display = 'flex';
             document.getElementById('result-icon').textContent = didIWin ? '🏆' : '💀';
-            document.getElementById('winner-text').textContent = `${winnerName.toUpperCase()} VYHRÁL!`;
+            document.getElementById('winner-text').textContent = `${(winnerName||'?').toUpperCase()} VYHRÁL!`;
             document.getElementById('winner-text').style.color = didIWin ? '#22c55e' : '#f43f5e';
         }
 
@@ -550,13 +573,13 @@
         async function resetRoom() {
             await update(ref(db, `rooms/${currentRoom}`), { rematchRequested: null });
             resultShown = false;
-            myState.hp = 100;
-            // FIX: use window dims for reset too
-            myState.x  = myIdInRoom === '1' ? Math.round(window.innerWidth * 0.25) : Math.round(window.innerWidth * 0.75);
-            myState.y  = Math.round(window.innerHeight / 2);
-            myState.isAttacking = false;
-            myState.isBlocking  = false;
-            sync();
+            my.hp = 100;
+            my.x  = myIdInRoom === '1' ? Math.round(window.innerWidth * 0.25) : Math.round(window.innerWidth * 0.75);
+            my.y  = Math.round(window.innerHeight / 2);
+            my.isAttacking = false;
+            my.isBlocking  = false;
+            lastPosX = -1; lastPosY = -1;
+            update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), { x: my.x, y: my.y, hp: 100, isAttacking: false, isBlocking: false });
             resultScreen.classList.add('hidden');
             resultScreen.style.display = 'none';
             document.getElementById('rematch-status').textContent = '';
@@ -568,18 +591,26 @@
         window.addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
 
         canvas.addEventListener('mousemove', e => {
-            myState.angle = Math.atan2(e.clientY - myState.y, e.clientX - myState.x);
-            // No sync here — loop handles it at 60fps
+            // Only update local angle — sync happens in loop at 10hz
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            my.angle = Math.atan2(e.clientY - my.y, e.clientX - my.x);
         });
 
         canvas.addEventListener('mousedown', e => {
             if (!gameActive || resultShown) return;
             if (e.button === 0) performAttack();
-            if (e.button === 2) { myState.isBlocking = true; sync(); }
+            if (e.button === 2) {
+                my.isBlocking = true;
+                update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), { isBlocking: true });
+            }
         });
 
         canvas.addEventListener('mouseup', e => {
-            if (e.button === 2) { myState.isBlocking = false; sync(); }
+            if (e.button === 2) {
+                my.isBlocking = false;
+                update(ref(db, `rooms/${currentRoom}/players/${myIdInRoom}`), { isBlocking: false });
+            }
         });
 
         // ─── Particles ────────────────────────────────────────────────────────
@@ -723,32 +754,49 @@
             ctx.closePath();
         }
 
-        // ─── Main loop ────────────────────────────────────────────────────────
+        // ─── Main loop — 60fps, fully local ───────────────────────────────────
+        const LERP = 0.25; // interpolation speed for enemy position
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        function lerpAngle(a, b, t) {
+            let d = b - a;
+            while (d > Math.PI)  d -= Math.PI * 2;
+            while (d < -Math.PI) d += Math.PI * 2;
+            return a + d * t;
+        }
+
         let lastFrame = 0;
         function loop(ts) {
-            const dt = ts - lastFrame;
-            lastFrame = ts;
             requestAnimationFrame(loop);
-
             if (!gameActive || resultShown) return;
 
-            // Movement
+            // ── Movement (local, instant, no Firebase) ──
             const speed = 5;
             let moved = false;
-            if (keys['w'] || keys['arrowup'])    { myState.y -= speed; moved = true; }
-            if (keys['s'] || keys['arrowdown'])   { myState.y += speed; moved = true; }
-            if (keys['a'] || keys['arrowleft'])   { myState.x -= speed; moved = true; }
-            if (keys['d'] || keys['arrowright'])  { myState.x += speed; moved = true; }
+            if (keys['w'] || keys['arrowup'])    { my.y -= speed; moved = true; }
+            if (keys['s'] || keys['arrowdown'])   { my.y += speed; moved = true; }
+            if (keys['a'] || keys['arrowleft'])   { my.x -= speed; moved = true; }
+            if (keys['d'] || keys['arrowright'])  { my.x += speed; moved = true; }
 
-            if (moved) {
-                myState.x = Math.max(30, Math.min(canvas.width  - 30, myState.x));
-                myState.y = Math.max(30, Math.min(canvas.height - 30, myState.y));
+            if (moved || keys['w'] || keys['s'] || keys['a'] || keys['d']) {
+                my.x = Math.max(30, Math.min(canvas.width  - 30, my.x));
+                my.y = Math.max(30, Math.min(canvas.height - 30, my.y));
+                // Update angle toward mouse after move
+                my.angle = Math.atan2(mouseY - my.y, mouseX - my.x);
             }
 
-            // Sync at ~20fps to avoid Firebase hammering
-            if (ts - lastSync > 50) {
-                sync();
-                lastSync = ts;
+            // ── Firebase sync (rate-limited) ──
+            syncPosition(ts);
+
+            // ── Interpolate enemy ──
+            if (enemy && enemyRender) {
+                enemyRender.x     = lerp(enemyRender.x, enemy.x, LERP);
+                enemyRender.y     = lerp(enemyRender.y, enemy.y, LERP);
+                enemyRender.angle = lerpAngle(enemyRender.angle, enemy.angle, LERP);
+                enemyRender.hp          = enemy.hp;
+                enemyRender.isAttacking = enemy.isAttacking;
+                enemyRender.isBlocking  = enemy.isBlocking;
+                enemyRender.name        = enemy.name;
             }
 
             // ── Render ──
@@ -761,12 +809,12 @@
                 ctx.save();
                 ctx.globalAlpha = f.alpha;
                 const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r);
-                grad.addColorStop(0, 'rgba(255,255,255,0.6)');
+                grad.addColorStop(0, 'rgba(255,255,255,0.5)');
                 grad.addColorStop(1, 'transparent');
                 ctx.fillStyle = grad;
                 ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
-                f.r += 4; f.alpha -= 0.06;
+                f.r += 5; f.alpha -= 0.07;
                 if (f.alpha <= 0) hitFlashes.splice(i, 1);
             }
 
@@ -779,15 +827,21 @@
                 ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
                 p.x += p.vx; p.y += p.vy;
-                p.vy += 0.2;
-                p.life -= 0.05;
+                p.vy += 0.15;
+                p.life -= 0.045;
                 if (p.life <= 0) particles.splice(i, 1);
             }
 
-            // Players
-            for (let id in players) {
-                drawPlayer(players[id], id);
+            // Draw my player
+            drawPlayer(my, myIdInRoom);
+
+            // Draw enemy (interpolated)
+            if (enemyRender) {
+                const enemyId = myIdInRoom === '1' ? '2' : '1';
+                drawPlayer(enemyRender, enemyId);
             }
+
+            lastFrame = ts;
         }
 
         requestAnimationFrame(loop);
