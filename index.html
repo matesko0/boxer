@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Boxer Duo Fight</title>
+    <style>
+        body { margin: 0; background: #111; color: #00ff00; font-family: 'Segoe UI', sans-serif; overflow: hidden; text-align: center; }
+        canvas { background: #000; border: 3px solid #333; margin-top: 20px; box-shadow: 0 0 20px rgba(0,255,0,0.2); }
+        .ui { margin-top: 15px; }
+        kbd { background: #333; padding: 2px 5px; border-radius: 4px; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        <h1 id="status">Připojování...</h1>
+        <p>Ovládání: <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></p>
+    </div>
+    <canvas id="game" width="800" height="500"></canvas>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCJdPiQ-diG_VnRGq6vnZshVUhViPmy_Qk",
+            authDomain: "boxer-e8def.firebaseapp.com",
+            databaseURL: "https://boxer-e8def-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "boxer-e8def",
+            storageBucket: "boxer-e8def.firebasestorage.app",
+            messagingSenderId: "533223374509",
+            appId: "1:533223374509:web:516cb9e4c9a5fff85f1024",
+            measurementId: "G-XWKSZBTRHV"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const playerId = urlParams.get('p') || '1';
+        document.getElementById('status').innerText = `Hraješ jako Hráč ${playerId}`;
+
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        let players = {};
+
+        onValue(ref(db, 'players'), (snapshot) => {
+            players = snapshot.val() || {};
+            render();
+        });
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let id in players) {
+                ctx.fillStyle = id === '1' ? '#ff4757' : '#2ed573';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.fillRect(players[id].x, players[id].y, 40, 40);
+                
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = "#fff";
+                ctx.font = "14px Arial";
+                ctx.fillText("P" + id, players[id].x + 10, players[id].y - 10);
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            const pos = players[playerId] || { x: 100, y: 100 };
+            const step = 15;
+            if (e.key === 'ArrowUp') pos.y -= step;
+            if (e.key === 'ArrowDown') pos.y += step;
+            if (e.key === 'ArrowLeft') pos.x -= step;
+            if (e.key === 'ArrowRight') pos.x += step;
+            
+            set(ref(db, 'players/' + playerId), pos);
+        });
+    </script>
+</body>
+</html>
